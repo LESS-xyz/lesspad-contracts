@@ -18,12 +18,24 @@ contract LessLibrary is Ownable {
     uint256 private minVoterBalance = 500 * 1e18; // minimum number of  tokens to hold to vote
     uint256 private minCreatorStakedBalance = 8000 * 1e18; // minimum number of tokens to hold to launch rocket
 
+    uint8 private feePercent = 2;
+
+    address private uniswapRouter = address(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D); // uniswapV2 Router
+
+    address payable private lessVault;
+
     Staking public safeStakingPool;
 
     mapping(address => bool) private safeDevs;
+    mapping(address => bool) private isPresale;
 
     modifier onlyDev() {
         require(owner() == msg.sender || safeDevs[msg.sender], "onlyDev");
+        _;
+    }
+
+    modifier onlyPresale() {
+        require(isPresale[msg.sender], "Not presale");
         _;
     }
 
@@ -32,9 +44,11 @@ contract LessLibrary is Ownable {
         _;
     }
 
-    constructor(address _dev) {
+    constructor(address _dev, address payable _vault) {
         require(_dev != address(0));
+        require(_vault != address(0));
         safeDevs[_dev] = true;
+        lessVault = _vault;
     }
 
     function setFactoryAddress(address _factory) external onlyDev {
@@ -48,6 +62,7 @@ contract LessLibrary is Ownable {
         returns (uint256)
     {
         presaleAddresses.push(_presale);
+        isPresale[_presale] = true;
         return presaleAddresses.length - 1;
     }
 
@@ -119,5 +134,21 @@ contract LessLibrary is Ownable {
             return balance;
         }
         return 0;
+    }
+
+    function getUniswapRouter() external view returns (address) {
+        return uniswapRouter;
+    }
+
+    function setUniswapRouter(address _uniswapRouter) external onlyDev {
+        uniswapRouter = _uniswapRouter;
+    }
+
+    function calculateFee(uint256 amount) external view onlyPresale returns(uint256){
+        return amount * feePercent / 100;
+    }
+
+    function getVaultAddress() external view onlyPresale returns(address payable){
+        return lessVault;
     }
 }

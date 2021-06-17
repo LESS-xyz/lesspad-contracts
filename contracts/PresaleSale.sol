@@ -4,12 +4,10 @@ pragma solidity ^0.8.0;
 import "./LessLibrary.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
-contract Presale is ReentrancyGuard {
-    //initial values
-    address presaleCreator;
+contract PresaleSale is ReentrancyGuard {
+    address payable presaleCreator;
     address platformOwner;
     IERC20 public token;
     uint8 public tokenDecimals;
@@ -19,20 +17,12 @@ contract Presale is ReentrancyGuard {
     uint256 public closeTimeVoting;
     uint256 public openTimePresale;
     uint256 public closeTimePresale;
-    uint256 public totalAmount;
-    uint8 public liquidityAllocation;
-    uint256 public listingPrice;
-    uint256 public liquidityLockDuration;
-    //uint256 public minEthPerWallet;
-    //uint256 public ethAllocationFactor;
-    address private unsoldTokensAddress;
-    //uint256 public headStart;
+    uint256 public unlockEthTime; // time when presale creator can collect funds raise
     uint256 public tokenMagnitude = 1e18;
     uint256 public minInvestInWei; // minimum wei amount that can be invested per wallet address
     uint256 public maxInvestInWei; // maximum wei amount that can be invested per wallet address
     uint256 private presaleId;
 
-    //presale values
     bool cancelled;
     uint256 public raisedAmount;
     uint256 public participants;
@@ -40,16 +30,27 @@ contract Presale is ReentrancyGuard {
     uint256 public yesVotes;
     uint256 public noVotes;
     uint256 public tokensLeft; // available tokens to be sold
-    uint256 public tokensForLiquidity;
     uint256 private counter;
     mapping(address => uint256) public voters;
     mapping(address => bool) public claimed; // if true, it means investor already claimed the tokens or got a refund
-    mapping(address => uint256) public investments; // total wei invested per address
+    mapping(address => Investment) public investments; // total wei invested per address
 
-    //other contracts
+    //stringInfo
+    bytes32 public saleTitle;
+    bytes32 public linkTelegram;
+    bytes32 public linkTwitter;
+    bytes32 public linkGithub;
+    bytes32 public linkWebsite;
+    string public linkLogo;
+    string public description;
+    string public whitepaper;
+
     LessLibrary public lessLib;
 
-    mapping(uint256 => bool) public status;
+    struct Investment {
+        uint256 amountEth;
+        uint256 amountTokens;
+    }
 
     modifier onlyFabric() {
         require(factoryAddress == msg.sender);
@@ -86,7 +87,11 @@ contract Presale is ReentrancyGuard {
         _;
     }
 
-    constructor(address _factory, address _library, address _platformOwner) {
+    constructor(
+        address _factory,
+        address _library,
+        address _platformOwner
+    ) {
         require(_factory != address(0));
         require(_library != address(0));
         require(_platformOwner != address(0));
@@ -107,21 +112,15 @@ contract Presale is ReentrancyGuard {
         address _token,
         uint256 _price,
         uint256 _tokensForSale,
-        uint256 _tokensForLiquidity,
         uint256 _soft,
         uint256 _hard,
-        uint8 _liquidityAlloc,
-        uint256 _listingPrice, 
-        uint256 _liquidityLockDuration,
         uint256 _openPresale,
-        uint256 _closePresale,
-        address _unsold
+        uint256 _closePresale
     ) external onlyFabric {
         require(_presaleCreator != address(0));
         require(_token != address(0));
         require(counter == 0, "Function can work only once");
         require(_price > 0, "Price should be more then zero");
-        require(_unsold != address(0), "Wrong unsold address");
         require(
             _openPresale > 0 && _closePresale > 0,
             "Wrong time presale interval"
@@ -131,22 +130,19 @@ contract Presale is ReentrancyGuard {
             _openPresale >= closeTimeVoting,
             "Voting and investment should not overlap"
         );
-        require(_tokensForSale !=0 && _tokensForLiquidity != 0, "Not null tokens amount");
-        require(_liquidityAlloc != 0 && _liquidityLockDuration != 0 && _listingPrice != 0, "Not null liquidity vars");
-        presaleCreator = _presaleCreator;
+        require(
+            _tokensForSale != 0,
+            "Not null tokens amount"
+        );
+        presaleCreator = payable(_presaleCreator);
         token = IERC20(_token);
         tokenDecimals = ERC20(_token).decimals();
         pricePerToken = _price;
         softCap = _soft;
         hardCap = _hard;
-        liquidityAllocation = _liquidityAlloc;
-        listingPrice = _listingPrice;
-        liquidityLockDuration = _liquidityLockDuration;
         tokensLeft = _tokensForSale;
-        tokensForLiquidity = _tokensForLiquidity;
         openTimePresale = _openPresale;
         closeTimePresale = _closePresale;
-        unsoldTokensAddress = _unsold;
         tokenMagnitude = uint256(10)**uint256(tokenDecimals);
         counter++;
     }
@@ -177,19 +173,15 @@ contract Presale is ReentrancyGuard {
         uint256 discount = 0;
         if (amount < 15000) {
             return (_weiAmount * tokenMagnitude) / pricePerToken;
-        }
-        else if (amount >= 15000 && amount < 75000) {
+        } else if (amount >= 15000 && amount < 75000) {
             return (_weiAmount * tokenMagnitude) / pricePerToken;
-        }
-        else if (amount >= 75000 && amount < 150000) {
-            discount = pricePerToken * 5 / 100;
+        } else if (amount >= 75000 && amount < 150000) {
+            discount = (pricePerToken * 5) / 100;
             return (_weiAmount * tokenMagnitude) / (pricePerToken - discount);
-        }
-        else if (amount >= 150000 && amount < 325000) {
-            discount = pricePerToken * 7 / 100;
+        } else if (amount >= 150000 && amount < 325000) {
+            discount = (pricePerToken * 7) / 100;
             return (_weiAmount * tokenMagnitude) / (pricePerToken - discount);
-        }
-        else if (amount >= 700000){
+        } else if (amount >= 700000) {
             discount = pricePerToken / 10;
             return (_weiAmount * tokenMagnitude) / (pricePerToken - discount);
         }
@@ -219,15 +211,16 @@ contract Presale is ReentrancyGuard {
         onlyWhenOpenPresale
         votesPassed
     {
+        uint256 reservedTokens = getTokenAmount(msg.value);
         require(raisedAmount < hardCap, "Hard cap reached");
-        require(tokensLeft > 0);
+        require(tokensLeft >= reservedTokens);
         require(msg.value > 0);
         uint256 safeBalance = lessLib.getStakedSafeBalance(msg.sender);
         require(
             msg.value <= (tokensLeft * pricePerToken) / tokenMagnitude,
             "Not enough tokens left"
         );
-        uint256 totalInvestmentInWei = investments[msg.sender] + msg.value;
+        uint256 totalInvestmentInWei = investments[msg.sender].amountEth + msg.value;
         require(
             totalInvestmentInWei >= minInvestInWei ||
                 raisedAmount >= hardCap - 1 ether,
@@ -244,23 +237,24 @@ contract Presale is ReentrancyGuard {
             "Stake LessTokens"
         );
 
-        if (investments[msg.sender] == 0) {
+        if (investments[msg.sender].amountEth == 0) {
             participants += 1;
         }
 
         raisedAmount += msg.value;
-        investments[msg.sender] = totalInvestmentInWei;
-        tokensLeft = tokensLeft - getTokenAmount(msg.value);
+        investments[msg.sender].amountEth = totalInvestmentInWei;
+        investments[msg.sender].amountTokens += reservedTokens;
+        tokensLeft = tokensLeft - reservedTokens;
     }
 
     function withdrawInvestment(address payable to, uint256 amount)
         external
         votesPassed
-        onlyWhenOpenPresale
     {
-        require(investments[msg.sender] != 0, "You are not an invesor");
+        require(block.timestamp >= openTimePresale, "Not yet opened");
+        require(investments[msg.sender].amountEth != 0, "You are not an invesor");
         require(
-            investments[msg.sender] >= amount,
+            investments[msg.sender].amountEth >= amount,
             "You have not invest so much"
         );
         require(amount > 0, "Enter not zero amount");
@@ -272,29 +266,30 @@ contract Presale is ReentrancyGuard {
         }
         //require(raisedAmount < softCap, "Couldn't withdraw investments after softCap collection");
         require(to != address(0), "Enter not a zero address");
-        if (investments[msg.sender] - amount == 0) {
+        if (investments[msg.sender].amountEth - amount == 0) {
             participants -= 1;
         }
         to.transfer(amount);
+        uint256 reservedTokens = getTokenAmount(amount);
         raisedAmount -= amount;
-        investments[msg.sender] -= amount;
-        tokensLeft = tokensLeft + getTokenAmount(amount);
+        investments[msg.sender].amountEth -= amount;
+        investments[msg.sender].amountTokens -= reservedTokens;
+        tokensLeft += reservedTokens;
     }
 
     function claimTokens() external nonReentrant {
-        require(
+        /*require(
             raisedAmount >= hardCap,
             "You can claim tokens after collection a hardCap"
-        );
-        require(tokensForLiquidity == 0, "Liquidity is not provided");
+        );*/
         require(block.timestamp >= closeTimePresale, "Wait presale close time");
-        require(investments[msg.sender] != 0, "You are not an invesor");
+        require(investments[msg.sender].amountEth != 0, "You are not an invesor");
         require(
             !claimed[msg.sender],
             "You've been already claimed your tokens"
         );
         claimed[msg.sender] = true; // make sure this goes first before transfer to prevent reentrancy
-        token.transfer(msg.sender, getTokenAmount(investments[msg.sender]));
+        token.transfer(msg.sender, investments[msg.sender].amountTokens);
     }
 
     receive() external payable {
@@ -315,11 +310,54 @@ contract Presale is ReentrancyGuard {
         cancelled = true;
     }
 
-    function getPresaleId() external view onlyFabric returns(uint256){
+    function getPresaleId() external view onlyFabric returns (uint256) {
         return presaleId;
     }
 
     function setPresaleId(uint256 _id) external onlyFabric {
         presaleId = _id;
+    }
+
+    function setStringInfo(
+        bytes32 _saleTitle,
+        bytes32 _linkTelegram,
+        bytes32 _linkGithub,
+        bytes32 _linkTwitter,
+        bytes32 _linkWebsite,
+        string calldata _linkLogo,
+        string calldata _description,
+        string calldata _whitepaper
+    ) external onlyFabric {
+        saleTitle = _saleTitle;
+        linkTelegram = _linkTelegram;
+        linkGithub = _linkGithub;
+        linkTwitter = _linkTwitter;
+        linkWebsite = _linkWebsite;
+        linkLogo = _linkLogo;
+        description = _description;
+        whitepaper = _whitepaper;
+    }
+
+    function collectFundsRaised() external presaleIsNotCancelled {
+        require(msg.sender == presaleCreator, "Function for presale creator");
+        require(block.timestamp >= unlockEthTime);
+
+        uint256 collectedBalance = address(this).balance;
+
+        if (collectedBalance > 0) {
+            uint256 fee = lessLib.calculateFee(collectedBalance);
+            //address payable vault = lessLib.getVaultAddress();
+            lessLib.getVaultAddress().transfer(fee);
+            presaleCreator.transfer(address(this).balance);
+        }
+    }
+
+    function getUnsoldTokens() external presaleIsNotCancelled{
+        require(msg.sender == presaleCreator || msg.sender == platformOwner, "Only for owners");
+
+        uint256 unsoldTokensAmount = tokensLeft;
+        if (unsoldTokensAmount > 0) {
+            token.transfer(presaleCreator, unsoldTokensAmount);
+        }
     }
 }

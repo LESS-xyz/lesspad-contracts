@@ -4,7 +4,7 @@ pragma solidity ^0.8.0;
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "./Staking.sol";
 import "./LessLibrary.sol";
-import "./Presale.sol";
+import "./PresaleIdo.sol";
 //import "./SafeTeslaLiquidityLock.sol";
 
 contract PresaleFactory {
@@ -41,7 +41,7 @@ contract PresaleFactory {
         uint256 minInvestInWei;
         uint256 openTime;
         uint256 closeTime;
-        address forUnsoldTokens;
+        uint8 presaleType;
     }
 
     struct PresalePancakeSwapInfo {
@@ -59,7 +59,6 @@ contract PresaleFactory {
         string linkLogo;
         string description;
         string whitepaper;
-        uint256 categoryId;
     }
 
     modifier onlyOwner {
@@ -73,12 +72,12 @@ contract PresaleFactory {
     }
 
     function initializePresale(
-        Presale _presale,
+        PresaleIdo _presale,
         uint256 _tokensForSale,
         uint256 _tokensForLiquidity,
         PresaleInfo calldata _info,
-        PresalePancakeSwapInfo calldata _cakeInfo
-        //PresaleStringInfo calldata _stringInfo
+        PresalePancakeSwapInfo calldata _cakeInfo,
+        PresaleStringInfo calldata _stringInfo
     ) internal {
         _presale.init(
             msg.sender,
@@ -92,8 +91,7 @@ contract PresaleFactory {
             _cakeInfo.listingPriceInWei,
             _cakeInfo.lpTokensLockDurationInDays,
             _info.openTime,
-            _info.closeTime,
-            _info.forUnsoldTokens
+            _info.closeTime
         );
         /*_presale.setAddressInfo(
             msg.sender,
@@ -114,7 +112,7 @@ contract PresaleFactory {
             _cakeInfo.lpTokensLockDurationInDays,
             _cakeInfo.liquidityPercentageAllocation
         );*/
-        /*_presale.setStringInfo(
+        _presale.setStringInfo(
             _stringInfo.saleTitle,
             _stringInfo.linkTelegram,
             _stringInfo.linkGithub,
@@ -122,16 +120,16 @@ contract PresaleFactory {
             _stringInfo.linkWebsite,
             _stringInfo.linkLogo,
             _stringInfo.description,
-            _stringInfo.whitepaper,
-            _stringInfo.categoryId
-        );*/
+            _stringInfo.whitepaper
+        );
     }
 
-    function createPresale(
+    function createPresaleIdo(
         PresaleInfo calldata _info,
         PresalePancakeSwapInfo calldata _cakeInfo,
         PresaleStringInfo calldata _stringInfo
     ) external {
+        require(_info.presaleType == 0, "Use other function for other presale type");
         uint256 stakedBalance = safeLibrary.getStakedSafeBalance(msg.sender);
         require(
             stakedBalance >= safeLibrary.getMinCreatorStakedBalance(),
@@ -139,8 +137,8 @@ contract PresaleFactory {
         );
 
         ERC20 _token = ERC20(_info.tokenAddress);
-        Presale presale =
-            new Presale(
+        PresaleIdo presale =
+            new PresaleIdo(
                 address(this),
                 address(safeLibrary),
                 safeLibrary.owner()
@@ -158,7 +156,8 @@ contract PresaleFactory {
             maxTokensToBeSold,
             maxLiqPoolTokenAmount,
             _info,
-            _cakeInfo
+            _cakeInfo,
+            _stringInfo
         );
 
         /*SafeTeslaLiquidityLock liquidityLock =
