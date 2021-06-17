@@ -5,6 +5,7 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "./Staking.sol";
 import "./LessLibrary.sol";
 import "./PresaleIdo.sol";
+import "./PresaleSale.sol";
 //import "./SafeTeslaLiquidityLock.sol";
 
 contract PresaleFactory {
@@ -71,7 +72,7 @@ contract PresaleFactory {
         _;
     }
 
-    function initializePresale(
+    function initializePresaleIdo(
         PresaleIdo _presale,
         uint256 _tokensForSale,
         uint256 _tokensForLiquidity,
@@ -93,25 +94,34 @@ contract PresaleFactory {
             _info.openTime,
             _info.closeTime
         );
-        /*_presale.setAddressInfo(
+        _presale.setStringInfo(
+            _stringInfo.saleTitle,
+            _stringInfo.linkTelegram,
+            _stringInfo.linkGithub,
+            _stringInfo.linkTwitter,
+            _stringInfo.linkWebsite,
+            _stringInfo.linkLogo,
+            _stringInfo.description,
+            _stringInfo.whitepaper
+        );
+    }
+
+    function initializePresaleSale(
+        PresaleSale _presale,
+        uint256 _tokensForSale,
+        PresaleInfo calldata _info,
+        PresaleStringInfo calldata _stringInfo
+    ) internal {
+        _presale.init(
             msg.sender,
             _info.tokenAddress,
-            _info.tokenDecimals,
-            address(token)
-        );
-        _presale.setGeneralInfo(
-            _totalTokens,
             _info.tokenPriceInWei,
-            _info.hardCapInWei,
+            _tokensForSale,
             _info.softCapInWei,
+            _info.hardCapInWei,
             _info.openTime,
             _info.closeTime
         );
-        _presale.setPancakeSwapInfo(
-            _cakeInfo.listingPriceInWei,
-            _cakeInfo.lpTokensLockDurationInDays,
-            _cakeInfo.liquidityPercentageAllocation
-        );*/
         _presale.setStringInfo(
             _stringInfo.saleTitle,
             _stringInfo.linkTelegram,
@@ -151,7 +161,7 @@ contract PresaleFactory {
 
         _token.transferFrom(msg.sender, address(presale), requiredTokenAmount);
 
-        initializePresale(
+        initializePresaleIdo(
             presale,
             maxTokensToBeSold,
             maxLiqPoolTokenAmount,
@@ -173,6 +183,41 @@ contract PresaleFactory {
                 msg.sender,
                 address(0)
             );*/
+
+        uint256 presaleId = safeLibrary.addPresaleAddress(address(presale));
+        presale.setPresaleId(presaleId);
+        emit PresaleCreated(_stringInfo.saleTitle, presaleId, msg.sender);
+    }
+
+    function createPresaleSale(
+        PresaleInfo calldata _info,
+        PresaleStringInfo calldata _stringInfo
+    ) external {
+        require(_info.presaleType == 1, "Use other function for other presale type");
+        uint256 stakedBalance = safeLibrary.getStakedSafeBalance(msg.sender);
+        require(
+            stakedBalance >= safeLibrary.getMinCreatorStakedBalance(),
+            "Stake LESS"
+        );
+
+        ERC20 _token = ERC20(_info.tokenAddress);
+        PresaleSale presale =
+            new PresaleSale(
+                address(this),
+                address(safeLibrary),
+                safeLibrary.owner()
+            );
+
+        uint256 requiredTokenAmount = _info.hardCapInWei * 110 / 100 * (uint256(10)**uint256(token.decimals())) / _info.tokenPriceInWei;
+
+        _token.transferFrom(msg.sender, address(presale), requiredTokenAmount);
+
+        initializePresaleSale(
+            presale,
+            requiredTokenAmount,
+            _info,
+            _stringInfo
+        );
 
         uint256 presaleId = safeLibrary.addPresaleAddress(address(presale));
         presale.setPresaleId(presaleId);
