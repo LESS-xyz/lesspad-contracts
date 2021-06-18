@@ -29,6 +29,7 @@ contract PresaleIdo is ReentrancyGuard {
     //initial values
     address payable presaleCreator;
     address platformOwner;
+    address private devAddress;
     IERC20 public token;
     uint8 public tokenDecimals;
     uint256 public pricePerToken;
@@ -40,6 +41,7 @@ contract PresaleIdo is ReentrancyGuard {
     uint8 public liquidityAllocation;
     uint256 public listingPrice;
     uint256 public liquidityLockDuration;
+    uint256 public liquidityAllocationTime;
     //uint256 public minEthPerWallet;
     //uint256 public ethAllocationFactor;
     uint256 public unlockEthTime; // time when presale creator can collect funds raise
@@ -48,6 +50,7 @@ contract PresaleIdo is ReentrancyGuard {
     uint256 public minInvestInWei; // minimum wei amount that can be invested per wallet address
     uint256 public maxInvestInWei; // maximum wei amount that can be invested per wallet address
     uint256 private presaleId;
+    bool public automatically;
 
     //presale values
     bool cancelled;
@@ -120,14 +123,17 @@ contract PresaleIdo is ReentrancyGuard {
     constructor(
         address _factory,
         address _library,
-        address _platformOwner
+        address _platformOwner,
+        address _devAddress
     ) {
         require(_factory != address(0));
         require(_library != address(0));
         require(_platformOwner != address(0));
+        require(_devAddress != address(0));
         factoryAddress = _factory;
         lessLib = LessLibrary(_library);
         platformOwner = _platformOwner;
+        devAddress = _devAddress;
         counter = 0;
         yesVotes = 0;
         noVotes = 0;
@@ -149,8 +155,10 @@ contract PresaleIdo is ReentrancyGuard {
         uint8 _liquidityAlloc,
         uint256 _listingPrice,
         uint256 _liquidityLockDuration,
+        uint256 _liquidityAllocationTime,
         uint256 _openPresale,
-        uint256 _closePresale
+        uint256 _closePresale,
+        bool _automatically
     ) external onlyFabric {
         require(_presaleCreator != address(0));
         require(_token != address(0));
@@ -175,6 +183,9 @@ contract PresaleIdo is ReentrancyGuard {
                 _listingPrice != 0,
             "Not null liquidity vars"
         );
+        if(_automatically){
+            require(_liquidityAllocationTime > _closePresale, "Wrong liquidity allocation time");
+        }
         presaleCreator = payable(_presaleCreator);
         token = IERC20(_token);
         tokenDecimals = ERC20(_token).decimals();
@@ -184,11 +195,13 @@ contract PresaleIdo is ReentrancyGuard {
         liquidityAllocation = _liquidityAlloc;
         listingPrice = _listingPrice;
         liquidityLockDuration = _liquidityLockDuration;
+        liquidityAllocationTime = _liquidityAllocationTime;
         tokensLeft = _tokensForSale;
         tokensForLiquidity = _tokensForLiquidity;
         openTimePresale = _openPresale;
         closeTimePresale = _closePresale;
         tokenMagnitude = uint256(10)**uint256(tokenDecimals);
+        automatically = _automatically;
         counter++;
     }
 
@@ -342,13 +355,24 @@ contract PresaleIdo is ReentrancyGuard {
         invest();
     }
 
-    function changeCloseTimeVoting(uint256 _newCloseTime) external {
+    function changeCloseTimeVoting(uint256 _newCloseTime) external presaleIsNotCancelled {
         require(msg.sender == platformOwner || msg.sender == presaleCreator);
+        require(block.timestamp < openTimePresale, "Presale has already beginning");
         require(
             _newCloseTime <= openTimePresale,
             "Voting and investment should not overlap"
         );
         closeTimeVoting = _newCloseTime;
+    }
+
+    function changePresaleTime(uint256 _newOpenTime, uint256 _newCloseTime) external presaleIsNotCancelled {
+        require(msg.sender == platformOwner || msg.sender == presaleCreator);
+        require(block.timestamp < openTimePresale, "Presale has already beginning");
+        require(closeTimeVoting < _newOpenTime, "Wrong new open presale time");
+        require(_newCloseTime > _newOpenTime, "Wrong new parameters");
+        require(_newCloseTime < liquidityAllocationTime, "Wrong new close presale time");
+        openTimePresale = _newOpenTime;
+        closeTimePresale = _newCloseTime;
     }
 
     function cancelPresale() external presaleIsNotCancelled {
@@ -385,10 +409,15 @@ contract PresaleIdo is ReentrancyGuard {
     }
 
     function addLiquidity() external presaleIsNotCancelled {
-        require(
-            msg.sender == presaleCreator,
-            "Function is only for presale creator"
-        );
+        if (automatically){
+            require(msg.sender == devAddress, "Function is only for backend");
+            require(liquidityAllocationTime < block.timestamp, "Too early to adding liquidity");
+        } else {
+            require(
+                msg.sender == presaleCreator,
+                "Function is only for presale creator"
+            );
+        }
         require(
             block.timestamp >= closeTimePresale,
             "Wait for presale closing"

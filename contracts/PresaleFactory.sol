@@ -9,7 +9,15 @@ import "./PresaleSale.sol";
 //import "./SafeTeslaLiquidityLock.sol";
 
 contract PresaleFactory {
-    event PresaleCreated(bytes32 title, uint256 presaleId, address creator);
+    event PresaleSaleCreated(bytes32 title, uint256 presaleId, address creator);
+    event PresaleNotAutomaticCreated(bytes32 title, uint256 presaleId, address creator);
+    event PresaleAutomaticCreated(
+        bytes32 title,
+        uint256 presaleId,
+        address creator,
+        address tokenAddress,
+        uint256 timeForLiquidity
+    );
     event Received(address indexed from, uint256 amount);
 
     LessLibrary public immutable safeLibrary;
@@ -43,12 +51,14 @@ contract PresaleFactory {
         uint256 openTime;
         uint256 closeTime;
         uint8 presaleType;
+        bool automatically;
     }
 
     struct PresalePancakeSwapInfo {
         uint256 listingPriceInWei;
         uint256 lpTokensLockDurationInDays;
         uint8 liquidityPercentageAllocation;
+        uint256 liquidityAllocationTime;
     }
 
     struct PresaleStringInfo {
@@ -68,7 +78,7 @@ contract PresaleFactory {
     }
 
     modifier onlyDev {
-        require(msg.sender == owner || safeLibrary.getDev(msg.sender));
+        require(msg.sender == owner || safeLibrary.getDev() == msg.sender);
         _;
     }
 
@@ -91,8 +101,10 @@ contract PresaleFactory {
             _cakeInfo.liquidityPercentageAllocation,
             _cakeInfo.listingPriceInWei,
             _cakeInfo.lpTokensLockDurationInDays,
+            _cakeInfo.liquidityAllocationTime,
             _info.openTime,
-            _info.closeTime
+            _info.closeTime,
+            _info.automatically
         );
         _presale.setStringInfo(
             _stringInfo.saleTitle,
@@ -140,6 +152,14 @@ contract PresaleFactory {
         PresaleStringInfo calldata _stringInfo
     ) external {
         require(_info.presaleType == 0, "Use other function for other presale type");
+        //timing check
+        require(
+            block.timestamp + safeLibrary.getVotingTime() <= _info.openTime &&
+            _info.openTime < _info.closeTime &&
+            _info.closeTime < _cakeInfo.liquidityAllocationTime,
+            "Wrong timing"
+        );
+        require(_info.tokenPriceInWei > 0 && _info.softCapInWei > 0 && _info.hardCapInWei > 0 && _info.hardCapInWei >= _info.softCapInWei, "Wrong parameters");
         uint256 stakedBalance = safeLibrary.getStakedSafeBalance(msg.sender);
         require(
             stakedBalance >= safeLibrary.getMinCreatorStakedBalance(),
@@ -151,14 +171,15 @@ contract PresaleFactory {
             new PresaleIdo(
                 address(this),
                 address(safeLibrary),
-                safeLibrary.owner()
+                safeLibrary.owner(),
+                safeLibrary.getDev()
             );
 
         uint256 maxLiqPoolTokenAmount = _info.hardCapInWei * _cakeInfo.liquidityPercentageAllocation * (uint256(10)**uint256(token.decimals())) / _cakeInfo.listingPriceInWei * 100;
 
         uint256 maxTokensToBeSold =_info.hardCapInWei * 110 / 100 * (uint256(10)**uint256(token.decimals())) / _info.tokenPriceInWei;
         uint256 requiredTokenAmount = maxLiqPoolTokenAmount + maxTokensToBeSold;
-
+        require(maxLiqPoolTokenAmount > 0 && maxTokensToBeSold > 0, "Wrong parameters");
         _token.transferFrom(msg.sender, address(presale), requiredTokenAmount);
 
         initializePresaleIdo(
@@ -186,7 +207,11 @@ contract PresaleFactory {
 
         uint256 presaleId = safeLibrary.addPresaleAddress(address(presale));
         presale.setPresaleId(presaleId);
-        emit PresaleCreated(_stringInfo.saleTitle, presaleId, msg.sender);
+        if (_info.automatically){
+            emit PresaleAutomaticCreated(_stringInfo.saleTitle, presaleId, msg.sender, _info.tokenAddress, _cakeInfo.liquidityAllocationTime);
+        } else {
+            emit PresaleNotAutomaticCreated(_stringInfo.saleTitle, presaleId, msg.sender);
+        }
     }
 
     function createPresaleSale(
@@ -209,7 +234,7 @@ contract PresaleFactory {
             );
 
         uint256 requiredTokenAmount = _info.hardCapInWei * 110 / 100 * (uint256(10)**uint256(token.decimals())) / _info.tokenPriceInWei;
-
+        require(requiredTokenAmount > 0, "Wrong parameters");
         _token.transferFrom(msg.sender, address(presale), requiredTokenAmount);
 
         initializePresaleSale(
@@ -221,7 +246,7 @@ contract PresaleFactory {
 
         uint256 presaleId = safeLibrary.addPresaleAddress(address(presale));
         presale.setPresaleId(presaleId);
-        emit PresaleCreated(_stringInfo.saleTitle, presaleId, msg.sender);
+        emit PresaleSaleCreated(_stringInfo.saleTitle, presaleId, msg.sender);
     }
 
     /*function claimHodlerFund() external {

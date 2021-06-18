@@ -23,14 +23,13 @@ contract LessLibrary is Ownable {
     address private uniswapRouter = address(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D); // uniswapV2 Router
 
     address payable private lessVault;
-
+    address private devAddress;
     Staking public safeStakingPool;
 
-    mapping(address => bool) private safeDevs;
     mapping(address => bool) private isPresale;
 
     modifier onlyDev() {
-        require(owner() == msg.sender || safeDevs[msg.sender], "onlyDev");
+        require(owner() == msg.sender || msg.sender == devAddress, "onlyDev");
         _;
     }
 
@@ -47,7 +46,7 @@ contract LessLibrary is Ownable {
     constructor(address _dev, address payable _vault) {
         require(_dev != address(0));
         require(_vault != address(0));
-        safeDevs[_dev] = true;
+        devAddress = _dev;
         lessVault = _vault;
     }
 
@@ -98,8 +97,8 @@ contract LessLibrary is Ownable {
         return minUnstakeTime;
     }
 
-    function getDev(address _dev) external view returns (bool) {
-        return safeDevs[_dev];
+    function getDev() external view onlyFactory returns (address) {
+        return devAddress;
     }
 
     function getMinVoterBalance() external view returns (uint256) {

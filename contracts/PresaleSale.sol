@@ -296,13 +296,23 @@ contract PresaleSale is ReentrancyGuard {
         invest();
     }
 
-    function changeCloseTimeVoting(uint256 _newCloseTime) external {
+    function changeCloseTimeVoting(uint256 _newCloseTime) external presaleIsNotCancelled {
         require(msg.sender == platformOwner || msg.sender == presaleCreator);
+        require(block.timestamp < openTimePresale, "Presale has already beginning");
         require(
             _newCloseTime <= openTimePresale,
             "Voting and investment should not overlap"
         );
         closeTimeVoting = _newCloseTime;
+    }
+
+    function changePresaleTime(uint256 _newOpenTime, uint256 _newCloseTime) external presaleIsNotCancelled {
+        require(msg.sender == platformOwner || msg.sender == presaleCreator);
+        require(block.timestamp < openTimePresale, "Presale has already beginning");
+        require(closeTimeVoting < _newOpenTime, "Wrong new open presale time");
+        require(_newCloseTime > _newOpenTime, "Wrong new parameters");
+        openTimePresale = _newOpenTime;
+        closeTimePresale = _newCloseTime;
     }
 
     function cancelPresale() external presaleIsNotCancelled {
