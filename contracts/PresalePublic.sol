@@ -2,13 +2,17 @@
 pragma solidity ^0.8.0;
 
 import "./LessLibrary.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+//import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+//import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+//import "./Staking.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "./interface.sol";
 
-contract PresaleSale is ReentrancyGuard {
+contract PresalePublic is ReentrancyGuard {
+    //initial values
     address payable presaleCreator;
     address platformOwner;
+    address private devAddress;
     IERC20 public token;
     uint8 public tokenDecimals;
     uint256 public pricePerToken;
@@ -17,19 +21,31 @@ contract PresaleSale is ReentrancyGuard {
     uint256 public closeTimeVoting;
     uint256 public openTimePresale;
     uint256 public closeTimePresale;
+    uint8 public liquidityAllocation;
+    uint256 public listingPrice;
+    uint256 public liquidityLockDuration;
+    uint256 public liquidityAllocationTime;
+    address private lpAddress;
+    uint256 private lpAmount;
+    //uint256 public minEthPerWallet;
+    //uint256 public ethAllocationFactor;
     uint256 public unlockEthTime; // time when presale creator can collect funds raise
+    //uint256 public headStart;
     uint256 public tokenMagnitude = 1e18;
     uint256 public minInvestInWei; // minimum wei amount that can be invested per wallet address
     uint256 public maxInvestInWei; // maximum wei amount that can be invested per wallet address
     uint256 private presaleId;
 
+    //presale values
     bool cancelled;
+    bool liquidityAdded;
     uint256 public raisedAmount;
     uint256 public participants;
     address factoryAddress;
     uint256 public yesVotes;
     uint256 public noVotes;
     uint256 public tokensLeft; // available tokens to be sold
+    uint256 public tokensForLiquidity;
     uint256 private counter;
     mapping(address => uint256) public voters;
     mapping(address => bool) public claimed; // if true, it means investor already claimed the tokens or got a refund
@@ -45,6 +61,7 @@ contract PresaleSale is ReentrancyGuard {
     string public description;
     string public whitepaper;
 
+    //other contracts
     LessLibrary public lessLib;
 
     struct Investment {
@@ -90,59 +107,83 @@ contract PresaleSale is ReentrancyGuard {
     constructor(
         address _factory,
         address _library,
-        address _platformOwner
+        address _platformOwner,
+        address _devAddress
     ) {
         require(_factory != address(0));
         require(_library != address(0));
         require(_platformOwner != address(0));
+        require(_devAddress != address(0));
         factoryAddress = _factory;
         lessLib = LessLibrary(_library);
         platformOwner = _platformOwner;
+        devAddress = _devAddress;
         counter = 0;
         yesVotes = 0;
         noVotes = 0;
         raisedAmount = 0;
         participants = 0;
+        lpAmount = 0;
         closeTimeVoting = block.timestamp + lessLib.getVotingTime();
         cancelled = false;
+        liquidityAdded = false;
     }
 
     function init(
-        address _presaleCreator,
-        address _token,
-        uint256 _price,
-        uint256 _tokensForSale,
-        uint256 _soft,
-        uint256 _hard,
-        uint256 _openPresale,
-        uint256 _closePresale
+        address[2] memory _creatorToken,
+        //address _presaleCreator,
+        //address _token,
+        uint256[5] memory _priceTokensForSaleLiquiditySoftHard,
+        //uint256 _price,
+        //uint256 _tokensForSale,
+        //uint256 _tokensForLiquidity,
+        //uint256 _soft,
+        //uint256 _hard,
+        uint8 _liquidityAlloc,
+        uint256[5] memory _liqPriceDurationAllocTimeOpenClose
+        //uint256 _listingPrice,
+        //uint256 _liquidityLockDuration,
+        //uint256 _liquidityAllocationTime,
+        //uint256 _openPresale,
+        //uint256 _closePresale
     ) external onlyFabric {
-        require(_presaleCreator != address(0));
-        require(_token != address(0));
+        require(_creatorToken[0] != address(0) && _creatorToken[1] != address(0), "Wrong addresses");
         require(counter == 0, "Function can work only once");
-        require(_price > 0, "Price should be more then zero");
+        require(_priceTokensForSaleLiquiditySoftHard[0] > 0, "Price should be more then zero");
         require(
-            _openPresale > 0 && _closePresale > 0,
+            _liqPriceDurationAllocTimeOpenClose[3] > 0 && _liqPriceDurationAllocTimeOpenClose[4] > 0,
             "Wrong time presale interval"
         );
-        require(_soft > 0 && _hard > 0, "Wron soft or hard cup values");
+        require(_priceTokensForSaleLiquiditySoftHard[3] > 0 && _priceTokensForSaleLiquiditySoftHard[4] > 0, "Wron soft or hard cup values");
         require(
-            _openPresale >= closeTimeVoting,
+            _liqPriceDurationAllocTimeOpenClose[3] >= closeTimeVoting,
             "Voting and investment should not overlap"
         );
         require(
-            _tokensForSale != 0,
+            _priceTokensForSaleLiquiditySoftHard[1] != 0 && _priceTokensForSaleLiquiditySoftHard[2] != 0,
             "Not null tokens amount"
         );
-        presaleCreator = payable(_presaleCreator);
-        token = IERC20(_token);
-        tokenDecimals = ERC20(_token).decimals();
-        pricePerToken = _price;
-        softCap = _soft;
-        hardCap = _hard;
-        tokensLeft = _tokensForSale;
-        openTimePresale = _openPresale;
-        closeTimePresale = _closePresale;
+        require(
+            _liquidityAlloc != 0 &&
+                _liqPriceDurationAllocTimeOpenClose[1] != 0 &&
+                _liqPriceDurationAllocTimeOpenClose[0] != 0,
+            "Not null liquidity vars"
+        );
+        require(_liqPriceDurationAllocTimeOpenClose[2] > _liqPriceDurationAllocTimeOpenClose[4], "Wrong liquidity allocation time");
+        presaleCreator = payable(_creatorToken[0]);
+        token = IERC20(_creatorToken[1]);
+        tokenDecimals = ERC20(_creatorToken[1]).decimals();
+        pricePerToken = _priceTokensForSaleLiquiditySoftHard[0];
+        softCap = _priceTokensForSaleLiquiditySoftHard[3];
+        hardCap = _priceTokensForSaleLiquiditySoftHard[4];
+        liquidityAllocation = _liquidityAlloc;
+        listingPrice = _liqPriceDurationAllocTimeOpenClose[0];
+        liquidityLockDuration = _liqPriceDurationAllocTimeOpenClose[1];
+        liquidityAllocationTime = _liqPriceDurationAllocTimeOpenClose[2];
+        tokensLeft = _priceTokensForSaleLiquiditySoftHard[1];
+        tokensForLiquidity = _priceTokensForSaleLiquiditySoftHard[2];
+        openTimePresale = _liqPriceDurationAllocTimeOpenClose[3];
+        closeTimePresale = _liqPriceDurationAllocTimeOpenClose[4];
         tokenMagnitude = uint256(10)**uint256(tokenDecimals);
         counter++;
     }
@@ -162,46 +203,6 @@ contract PresaleSale is ReentrancyGuard {
         } else {
             noVotes = noVotes + safeBalance;
         }
-    }
-
-    function getTokenAmount(uint256 _weiAmount)
-        internal
-        view
-        returns (uint256)
-    {
-        uint256 amount = lessLib.getStakedSafeBalance(msg.sender);
-        uint256 discount = 0;
-        if (amount < 15000) {
-            return (_weiAmount * tokenMagnitude) / pricePerToken;
-        } else if (amount >= 15000 && amount < 75000) {
-            return (_weiAmount * tokenMagnitude) / pricePerToken;
-        } else if (amount >= 75000 && amount < 150000) {
-            discount = (pricePerToken * 5) / 100;
-            return (_weiAmount * tokenMagnitude) / (pricePerToken - discount);
-        } else if (amount >= 150000 && amount < 325000) {
-            discount = (pricePerToken * 7) / 100;
-            return (_weiAmount * tokenMagnitude) / (pricePerToken - discount);
-        } else if (amount >= 700000) {
-            discount = pricePerToken / 10;
-            return (_weiAmount * tokenMagnitude) / (pricePerToken - discount);
-        }
-
-        return 0;
-
-        //uint256 safeBalance = lessLib.getStakedSafeBalance(msg.sender);
-
-        /*if (safeBalance >= minRewardQualifyBal) {
-            uint256 pctQualifyingDiscount =
-                tokenPriceInWei.mul(minRewardQualifyPercentage).div(100);
-            return
-                _weiAmount.mul(tokenMagnitude).div(
-                    tokenPriceInWei.sub(pctQualifyingDiscount)
-                );
-        } else {
-            return _weiAmount.mul(tokenMagnitude).div(tokenPriceInWei);
-        }*/
-
-        //return (_weiAmount * tokenMagnitude) / pricePerToken;
     }
 
     function invest()
@@ -282,6 +283,7 @@ contract PresaleSale is ReentrancyGuard {
             raisedAmount >= hardCap,
             "You can claim tokens after collection a hardCap"
         );*/
+        require(liquidityAdded, "Liquidity is not provided");
         require(block.timestamp >= closeTimePresale, "Wait presale close time");
         require(investments[msg.sender].amountEth != 0, "You are not an invesor");
         require(
@@ -311,6 +313,7 @@ contract PresaleSale is ReentrancyGuard {
         require(block.timestamp < openTimePresale, "Presale has already beginning");
         require(closeTimeVoting < _newOpenTime, "Wrong new open presale time");
         require(_newCloseTime > _newOpenTime, "Wrong new parameters");
+        require(_newCloseTime < liquidityAllocationTime, "Wrong new close presale time");
         openTimePresale = _newOpenTime;
         closeTimePresale = _newCloseTime;
     }
@@ -320,7 +323,7 @@ contract PresaleSale is ReentrancyGuard {
         cancelled = true;
     }
 
-    function getPresaleId() external view onlyFabric returns (uint256) {
+    function getPresaleId() external view returns (uint256) {
         return presaleId;
     }
 
@@ -348,9 +351,53 @@ contract PresaleSale is ReentrancyGuard {
         whitepaper = _whitepaper;
     }
 
+    function addLiquidity() external presaleIsNotCancelled {
+        require(msg.sender == devAddress, "Function is only for backend");
+        require(liquidityAllocationTime <= block.timestamp, "Too early to adding liquidity");
+        
+        require(
+            block.timestamp >= closeTimePresale,
+            "Wait for presale closing"
+        );
+        require(!liquidityAdded, "Liquidity has been already added");
+        require(raisedAmount > 0, "Have not raised amount");
+
+        uint256 liqPoolEthAmount = (raisedAmount * liquidityAllocation) / 100;
+        uint256 liqPoolTokenAmount =
+            (liqPoolEthAmount * tokenMagnitude) / listingPrice;
+
+        require(tokensForLiquidity >= liqPoolTokenAmount, "Error liquidity");
+
+        IUniswapV2Router02 uniswapRouter =
+            IUniswapV2Router02(address(lessLib.getUniswapRouter()));
+
+        token.approve(address(uniswapRouter), liqPoolTokenAmount);
+
+        ( , ,lpAmount) = uniswapRouter.addLiquidityETH{value: liqPoolEthAmount}(
+            address(token),
+            liqPoolTokenAmount,
+            0,
+            0,
+            address(this),
+            block.timestamp + 15 minutes
+        );
+
+        require(lpAmount != 0, "lpAmount not null");
+
+        IUniswapV2Factory02 uniswapFactory = IUniswapV2Factory02(uniswapRouter.factory());
+        lpAddress = uniswapFactory.getPair(uniswapRouter.WETH(), address(token));
+
+        tokensForLiquidity -= liqPoolTokenAmount;
+        liquidityAdded = true;
+        unlockEthTime =
+            block.timestamp +
+            (liquidityLockDuration * 24 * 60 * 60);
+    }
+
     function collectFundsRaised() external presaleIsNotCancelled {
         require(msg.sender == presaleCreator, "Function for presale creator");
-        require(block.timestamp >= unlockEthTime);
+        require(liquidityAdded, "Add liquidity to get raised funds");
+        //require(block.timestamp >= unlockEthTime);
 
         uint256 collectedBalance = address(this).balance;
 
@@ -362,12 +409,60 @@ contract PresaleSale is ReentrancyGuard {
         }
     }
 
+    function refundLpTokens() external presaleIsNotCancelled {
+        require(msg.sender == presaleCreator, "Function for presale creator");
+        require(liquidityAdded, "Add liquidity to get raised funds");
+        require(block.timestamp >= unlockEthTime, "Too early");
+        require(IERC20(lpAddress).transfer(presaleCreator, lpAmount), "Couldn't get your tokens");
+    }
+
     function getUnsoldTokens() external presaleIsNotCancelled{
+        require(liquidityAdded);
         require(msg.sender == presaleCreator || msg.sender == platformOwner, "Only for owners");
 
-        uint256 unsoldTokensAmount = tokensLeft;
+        uint256 unsoldTokensAmount = tokensLeft + tokensForLiquidity;
         if (unsoldTokensAmount > 0) {
             token.transfer(presaleCreator, unsoldTokensAmount);
         }
+    }
+
+    function getTokenAmount(uint256 _weiAmount)
+        internal
+        view
+        returns (uint256)
+    {
+        uint256 amount = lessLib.getStakedSafeBalance(msg.sender);
+        uint256 discount = 0;
+        if (amount < 15000) {
+            return (_weiAmount * tokenMagnitude) / pricePerToken;
+        } else if (amount >= 15000 && amount < 75000) {
+            return (_weiAmount * tokenMagnitude) / pricePerToken;
+        } else if (amount >= 75000 && amount < 150000) {
+            discount = (pricePerToken * 5) / 100;
+            return (_weiAmount * tokenMagnitude) / (pricePerToken - discount);
+        } else if (amount >= 150000 && amount < 325000) {
+            discount = (pricePerToken * 7) / 100;
+            return (_weiAmount * tokenMagnitude) / (pricePerToken - discount);
+        } else if (amount >= 700000) {
+            discount = pricePerToken / 10;
+            return (_weiAmount * tokenMagnitude) / (pricePerToken - discount);
+        }
+
+        return 0;
+
+        //uint256 safeBalance = lessLib.getStakedSafeBalance(msg.sender);
+
+        /*if (safeBalance >= minRewardQualifyBal) {
+            uint256 pctQualifyingDiscount =
+                tokenPriceInWei.mul(minRewardQualifyPercentage).div(100);
+            return
+                _weiAmount.mul(tokenMagnitude).div(
+                    tokenPriceInWei.sub(pctQualifyingDiscount)
+                );
+        } else {
+            return _weiAmount.mul(tokenMagnitude).div(tokenPriceInWei);
+        }*/
+
+        //return (_weiAmount * tokenMagnitude) / pricePerToken;
     }
 }

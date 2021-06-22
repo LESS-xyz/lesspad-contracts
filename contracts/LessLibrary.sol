@@ -8,10 +8,10 @@ contract LessLibrary is Ownable {
     address[] private presaleAddresses; // track all presales created
 
     uint256 private minInvestorBalance = 15000 * 1e18;
-    uint256 private votingTime = 259200; //three days
+    uint256 private votingTime = 600; //tthree days
     //uint256 private votingTime = 300;
-    uint256 private minStakeTime = 1 days;
-    uint256 private minUnstakeTime = 6 days;
+    uint256 private minStakeTime = 300; //one day
+    uint256 private minUnstakeTime = 1000; //six days
 
     address private factoryAddress;
 
@@ -78,6 +78,11 @@ contract LessLibrary is Ownable {
         onlyDev
     {
         presaleAddresses[id] = _newAddress;
+    }
+
+    function setVotingTime(uint256 _newVotingTime) external onlyDev {
+        require(_newVotingTime > 0, "Wrong new time");
+        votingTime = _newVotingTime;
     }
 
     function setStakingAddress(address _staking) external onlyDev {

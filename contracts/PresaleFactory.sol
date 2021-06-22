@@ -4,19 +4,26 @@ pragma solidity ^0.8.0;
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "./Staking.sol";
 import "./LessLibrary.sol";
-import "./PresaleIdo.sol";
-import "./PresaleSale.sol";
-//import "./SafeTeslaLiquidityLock.sol";
+//import "./PresaleCertified.sol";
+import "./PresalePublic.sol";
 
 contract PresaleFactory {
-    event PresaleSaleCreated(bytes32 title, uint256 presaleId, address creator);
-    event PresaleNotAutomaticCreated(bytes32 title, uint256 presaleId, address creator);
-    event PresaleAutomaticCreated(
-        bytes32 title,
+    event PublicPresaleCreated(
         uint256 presaleId,
         address creator,
         address tokenAddress,
         uint256 timeForLiquidity
+    );
+    event CertifiedAutoPresaleCreated(
+        uint256 presaleId,
+        address creator,
+        address tokenAddress,
+        uint256 timeForLiquidity
+    );
+    event CertifiedPresaleCreated(
+        uint256 presaleId,
+        address creator,
+        address tokenAddress
     );
     event Received(address indexed from, uint256 amount);
 
@@ -51,7 +58,11 @@ contract PresaleFactory {
         uint256 openTime;
         uint256 closeTime;
         uint8 presaleType;
+        bool liquidity;
         bool automatically;
+        bool whitelisted;
+        address[] whitelist;
+        bool vesting;
     }
 
     struct PresalePancakeSwapInfo {
@@ -82,84 +93,29 @@ contract PresaleFactory {
         _;
     }
 
-    function initializePresaleIdo(
-        PresaleIdo _presale,
-        uint256 _tokensForSale,
-        uint256 _tokensForLiquidity,
-        PresaleInfo calldata _info,
-        PresalePancakeSwapInfo calldata _cakeInfo,
-        PresaleStringInfo calldata _stringInfo
-    ) internal {
-        _presale.init(
-            msg.sender,
-            _info.tokenAddress,
-            _info.tokenPriceInWei,
-            _tokensForSale,
-            _tokensForLiquidity,
-            _info.softCapInWei,
-            _info.hardCapInWei,
-            _cakeInfo.liquidityPercentageAllocation,
-            _cakeInfo.listingPriceInWei,
-            _cakeInfo.lpTokensLockDurationInDays,
-            _cakeInfo.liquidityAllocationTime,
-            _info.openTime,
-            _info.closeTime,
-            _info.automatically
-        );
-        _presale.setStringInfo(
-            _stringInfo.saleTitle,
-            _stringInfo.linkTelegram,
-            _stringInfo.linkGithub,
-            _stringInfo.linkTwitter,
-            _stringInfo.linkWebsite,
-            _stringInfo.linkLogo,
-            _stringInfo.description,
-            _stringInfo.whitepaper
-        );
-    }
-
-    function initializePresaleSale(
-        PresaleSale _presale,
-        uint256 _tokensForSale,
-        PresaleInfo calldata _info,
-        PresaleStringInfo calldata _stringInfo
-    ) internal {
-        _presale.init(
-            msg.sender,
-            _info.tokenAddress,
-            _info.tokenPriceInWei,
-            _tokensForSale,
-            _info.softCapInWei,
-            _info.hardCapInWei,
-            _info.openTime,
-            _info.closeTime
-        );
-        _presale.setStringInfo(
-            _stringInfo.saleTitle,
-            _stringInfo.linkTelegram,
-            _stringInfo.linkGithub,
-            _stringInfo.linkTwitter,
-            _stringInfo.linkWebsite,
-            _stringInfo.linkLogo,
-            _stringInfo.description,
-            _stringInfo.whitepaper
-        );
-    }
-
-    function createPresaleIdo(
+    function createPresalePublic(
         PresaleInfo calldata _info,
         PresalePancakeSwapInfo calldata _cakeInfo,
         PresaleStringInfo calldata _stringInfo
     ) external {
-        require(_info.presaleType == 0, "Use other function for other presale type");
+        require(
+            _info.presaleType == 0,
+            "Use other function for other presale type"
+        );
         //timing check
         require(
             block.timestamp + safeLibrary.getVotingTime() <= _info.openTime &&
-            _info.openTime < _info.closeTime &&
-            _info.closeTime < _cakeInfo.liquidityAllocationTime,
+                _info.openTime < _info.closeTime &&
+                _info.closeTime < _cakeInfo.liquidityAllocationTime,
             "Wrong timing"
         );
-        require(_info.tokenPriceInWei > 0 && _info.softCapInWei > 0 && _info.hardCapInWei > 0 && _info.hardCapInWei >= _info.softCapInWei, "Wrong parameters");
+        require(
+            _info.tokenPriceInWei > 0 &&
+                _info.softCapInWei > 0 &&
+                _info.hardCapInWei > 0 &&
+                _info.hardCapInWei >= _info.softCapInWei,
+            "Wrong parameters"
+        );
         uint256 stakedBalance = safeLibrary.getStakedSafeBalance(msg.sender);
         require(
             stakedBalance >= safeLibrary.getMinCreatorStakedBalance(),
@@ -167,22 +123,32 @@ contract PresaleFactory {
         );
 
         ERC20 _token = ERC20(_info.tokenAddress);
-        PresaleIdo presale =
-            new PresaleIdo(
+        PresalePublic presale =
+            new PresalePublic(
                 address(this),
                 address(safeLibrary),
                 safeLibrary.owner(),
                 safeLibrary.getDev()
             );
 
-        uint256 maxLiqPoolTokenAmount = _info.hardCapInWei * _cakeInfo.liquidityPercentageAllocation * (uint256(10)**uint256(token.decimals())) / _cakeInfo.listingPriceInWei * 100;
+        uint256 maxLiqPoolTokenAmount =
+            ((_info.hardCapInWei *
+                _cakeInfo.liquidityPercentageAllocation *
+                (uint256(10)**uint256(token.decimals()))) /
+                _cakeInfo.listingPriceInWei) * 100;
 
-        uint256 maxTokensToBeSold =_info.hardCapInWei * 110 / 100 * (uint256(10)**uint256(token.decimals())) / _info.tokenPriceInWei;
+        uint256 maxTokensToBeSold =
+            (((_info.hardCapInWei * 110) / 100) *
+                (uint256(10)**uint256(token.decimals()))) /
+                _info.tokenPriceInWei;
         uint256 requiredTokenAmount = maxLiqPoolTokenAmount + maxTokensToBeSold;
-        require(maxLiqPoolTokenAmount > 0 && maxTokensToBeSold > 0, "Wrong parameters");
+        require(
+            maxLiqPoolTokenAmount > 0 && maxTokensToBeSold > 0,
+            "Wrong parameters"
+        );
         _token.transferFrom(msg.sender, address(presale), requiredTokenAmount);
 
-        initializePresaleIdo(
+        initializePresalePublic(
             presale,
             maxTokensToBeSold,
             maxLiqPoolTokenAmount,
@@ -207,18 +173,23 @@ contract PresaleFactory {
 
         uint256 presaleId = safeLibrary.addPresaleAddress(address(presale));
         presale.setPresaleId(presaleId);
-        if (_info.automatically){
-            emit PresaleAutomaticCreated(_stringInfo.saleTitle, presaleId, msg.sender, _info.tokenAddress, _cakeInfo.liquidityAllocationTime);
-        } else {
-            emit PresaleNotAutomaticCreated(_stringInfo.saleTitle, presaleId, msg.sender);
-        }
+        emit PublicPresaleCreated(
+            presaleId,
+            msg.sender,
+            _info.tokenAddress,
+            _cakeInfo.liquidityAllocationTime
+        );
     }
 
-    function createPresaleSale(
+    /*function createPresaleCertified(
         PresaleInfo calldata _info,
+        PresalePancakeSwapInfo calldata _cakeInfo,
         PresaleStringInfo calldata _stringInfo
     ) external {
-        require(_info.presaleType == 1, "Use other function for other presale type");
+        require(
+            _info.presaleType == 1,
+            "Use other function for other presale type"
+        );
         uint256 stakedBalance = safeLibrary.getStakedSafeBalance(msg.sender);
         require(
             stakedBalance >= safeLibrary.getMinCreatorStakedBalance(),
@@ -226,28 +197,127 @@ contract PresaleFactory {
         );
 
         ERC20 _token = ERC20(_info.tokenAddress);
-        PresaleSale presale =
-            new PresaleSale(
+        PresaleCertified presale =
+            new PresaleCertified(
                 address(this),
                 address(safeLibrary),
-                safeLibrary.owner()
+                safeLibrary.owner(),
+                safeLibrary.getDev()
             );
 
-        uint256 requiredTokenAmount = _info.hardCapInWei * 110 / 100 * (uint256(10)**uint256(token.decimals())) / _info.tokenPriceInWei;
-        require(requiredTokenAmount > 0, "Wrong parameters");
+        uint256 maxTokensToBeSold =
+            (((_info.hardCapInWei * 110) / 100) *
+                (uint256(10)**uint256(token.decimals()))) /
+                _info.tokenPriceInWei;
+        uint256 maxLiqPoolTokenAmount;
+        uint256 requiredTokenAmount;
+        if (_info.liquidity) {
+            maxLiqPoolTokenAmount =
+                ((_info.hardCapInWei *
+                    _cakeInfo.liquidityPercentageAllocation *
+                    (uint256(10)**uint256(token.decimals()))) /
+                    _cakeInfo.listingPriceInWei) * 100;
+            require(
+                maxLiqPoolTokenAmount > 0 && maxTokensToBeSold > 0,
+                "Wrong parameters"
+            );
+            requiredTokenAmount = maxLiqPoolTokenAmount + maxTokensToBeSold;
+        } else {
+            requiredTokenAmount = maxTokensToBeSold;
+            require(requiredTokenAmount > 0, "Wrong parameters");
+        }
         _token.transferFrom(msg.sender, address(presale), requiredTokenAmount);
 
-        initializePresaleSale(
+        initializePresaleCertified(
             presale,
-            requiredTokenAmount,
+            maxTokensToBeSold,
+            maxLiqPoolTokenAmount,
             _info,
+            _cakeInfo,
             _stringInfo
         );
 
         uint256 presaleId = safeLibrary.addPresaleAddress(address(presale));
         presale.setPresaleId(presaleId);
-        emit PresaleSaleCreated(_stringInfo.saleTitle, presaleId, msg.sender);
+        if (_info.liquidity && _info.automatically) {
+            emit CertifiedAutoPresaleCreated(presaleId, msg.sender, _info.tokenAddress, _cakeInfo.liquidityAllocationTime);
+        } else {
+            emit CertifiedPresaleCreated(presaleId, msg.sender, _info.tokenAddress);
+        }
+    }*/
+
+    function initializePresalePublic(
+        PresalePublic _presale,
+        uint256 _tokensForSale,
+        uint256 _tokensForLiquidity,
+        PresaleInfo calldata _info,
+        PresalePancakeSwapInfo calldata _cakeInfo,
+        PresaleStringInfo calldata _stringInfo
+    ) internal {
+        _presale.init(
+            [msg.sender, _info.tokenAddress],
+            [_info.tokenPriceInWei,
+            _tokensForSale,
+            _tokensForLiquidity,
+            _info.softCapInWei,
+            _info.hardCapInWei],
+            _cakeInfo.liquidityPercentageAllocation,
+            [_cakeInfo.listingPriceInWei,
+            _cakeInfo.lpTokensLockDurationInDays,
+            _cakeInfo.liquidityAllocationTime,
+            _info.openTime,
+            _info.closeTime]
+        );
+        _presale.setStringInfo(
+            _stringInfo.saleTitle,
+            _stringInfo.linkTelegram,
+            _stringInfo.linkGithub,
+            _stringInfo.linkTwitter,
+            _stringInfo.linkWebsite,
+            _stringInfo.linkLogo,
+            _stringInfo.description,
+            _stringInfo.whitepaper
+        );
     }
+
+    /*function initializePresaleCertified(
+        PresaleCertified _presale,
+        uint256 _tokensForSale,
+        uint256 _tokensForLiquidity,
+        PresaleInfo calldata _info,
+        PresalePancakeSwapInfo calldata _cakeInfo,
+        PresaleStringInfo calldata _stringInfo
+    ) internal {
+        _presale.init(
+            [msg.sender,
+            _info.tokenAddress],
+            [_info.tokenPriceInWei,
+            _tokensForSale,
+            _tokensForLiquidity,
+            _info.softCapInWei,
+            _info.hardCapInWei],
+            _cakeInfo.liquidityPercentageAllocation,
+            [_cakeInfo.listingPriceInWei,
+            _cakeInfo.lpTokensLockDurationInDays,
+            _cakeInfo.liquidityAllocationTime,
+            _info.openTime,
+            _info.closeTime],
+            _info.whitelist,
+            [_info.whitelisted,
+            _info.liquidity,
+            _info.automatically]
+        );
+        _presale.setStringInfo(
+            _stringInfo.saleTitle,
+            _stringInfo.linkTelegram,
+            _stringInfo.linkGithub,
+            _stringInfo.linkTwitter,
+            _stringInfo.linkWebsite,
+            _stringInfo.linkLogo,
+            _stringInfo.description,
+            _stringInfo.whitepaper
+        );
+    }*/
 
     /*function claimHodlerFund() external {
         require(address(this).balance > 0);

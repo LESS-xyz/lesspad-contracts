@@ -2,7 +2,7 @@
 pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/utils/Address.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "./LessLibrary.sol";
 
@@ -26,7 +26,7 @@ contract Staking is ReentrancyGuard {
         require(
             msg.sender == safeLibrary.getFactoryAddress() ||
                 msg.sender == safeLibrary.owner() ||
-                safeLibrary.getDev(msg.sender),
+                msg.sender == safeLibrary.getDev(),
             "Only Dev"
         );
         _;
