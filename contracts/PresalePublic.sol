@@ -3,7 +3,7 @@ pragma solidity ^0.8.0;
 
 import "./LessLibrary.sol";
 //import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-//import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 //import "./Staking.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "./interface.sol";
@@ -29,16 +29,16 @@ contract PresalePublic is ReentrancyGuard {
     uint256 private lpAmount;
     //uint256 public minEthPerWallet;
     //uint256 public ethAllocationFactor;
-    uint256 public unlockEthTime; // time when presale creator can collect funds raise
+    uint256 public unlockEthTime; // time when presale creator can collect LP tokens
     //uint256 public headStart;
     uint256 public tokenMagnitude = 1e18;
     uint256 public minInvestInWei; // minimum wei amount that can be invested per wallet address
     uint256 public maxInvestInWei; // maximum wei amount that can be invested per wallet address
-    uint256 private presaleId;
+    uint256 public presaleId;
 
     //presale values
-    bool cancelled;
-    bool liquidityAdded;
+    bool public cancelled;
+    bool public liquidityAdded;
     uint256 public raisedAmount;
     uint256 public participants;
     address factoryAddress;
@@ -50,6 +50,7 @@ contract PresalePublic is ReentrancyGuard {
     mapping(address => uint256) public voters;
     mapping(address => bool) public claimed; // if true, it means investor already claimed the tokens or got a refund
     mapping(address => Investment) public investments; // total wei invested per address
+    //Info public info;
 
     //stringInfo
     bytes32 public saleTitle;
@@ -68,6 +69,67 @@ contract PresalePublic is ReentrancyGuard {
         uint256 amountEth;
         uint256 amountTokens;
     }
+
+    struct PresaleInfo {
+        address creator;
+        address tokenAddress;
+        uint256 tokenPriceInWei;
+        uint256 hardCapInWei;
+        uint256 softCapInWei;
+        uint256 tokensForSaleLeft;
+        uint256 tokensForLiquidityLeft;
+        uint256 closeTimeVoting;
+        uint256 openTime;
+        uint256 closeTime;
+        bool cancelled;
+        bool liquidityAdded;
+        uint256 raisedAmount;
+        uint256 participants;
+        uint256 yesVotes;
+        uint256 noVotes;
+    }
+
+    struct PresalePancakeSwapInfo {
+        uint256 listingPriceInWei;
+        uint256 lpTokensLockDurationInDays;
+        uint8 liquidityPercentageAllocation;
+        uint256 liquidityAllocationTime;
+        uint256 unlockTime;
+    }
+
+    struct PresaleStringInfo {
+        bytes32 saleTitle;
+        bytes32 linkTelegram;
+        bytes32 linkGithub;
+        bytes32 linkTwitter;
+        bytes32 linkWebsite;
+        string linkLogo;
+        string description;
+        string whitepaper;
+    }
+
+    /*struct Info {
+        uint256 id;
+        address creator;
+        address token;
+        uint256 pricePerToken;
+        uint256 softCap;
+        uint256 hardCap;
+        uint256 closeTimeVoting;
+        uint256 openTimePresale;
+        uint256 closeTimePresale;
+        uint8 percent;
+        uint256 listingPrice;
+        uint256 lockDurationTime;
+        uint256 liquidityAllocTime;
+        uint256 unlockLpTokensTime;
+        bool cancelled;
+        bool liquidityAdded;
+        uint256 raisedFunds;
+        uint256 participants;
+        uint256 yes;
+        uint256 no;
+    }*/
 
     modifier onlyFabric() {
         require(factoryAddress == msg.sender);
@@ -109,7 +171,7 @@ contract PresalePublic is ReentrancyGuard {
         address _library,
         address _platformOwner,
         address _devAddress
-    ) {
+    ) payable {
         require(_factory != address(0));
         require(_library != address(0));
         require(_platformOwner != address(0));
@@ -186,6 +248,28 @@ contract PresalePublic is ReentrancyGuard {
         closeTimePresale = _liqPriceDurationAllocTimeOpenClose[4];
         tokenMagnitude = uint256(10)**uint256(tokenDecimals);
         counter++;
+        /*info = Info(
+            presaleId,
+            presaleCreator,
+            address(token),
+            pricePerToken,
+            softCap,
+            hardCap,
+            closeTimeVoting,
+            openTimePresale,
+            closeTimePresale,
+            liquidityAllocation,
+            listingPrice,
+            liquidityLockDuration,
+            liquidityAllocationTime,
+            unlockEthTime,
+            cancelled,
+            liquidityAdded,
+            raisedAmount,
+            participants,
+            yesVotes,
+            noVotes
+        );*/
     }
 
     function vote(bool yes) external onlyWhenOpenVoting presaleIsNotCancelled {
@@ -392,6 +476,8 @@ contract PresalePublic is ReentrancyGuard {
         unlockEthTime =
             block.timestamp +
             (liquidityLockDuration * 24 * 60 * 60);
+
+        //info.unlockLpTokensTime = unlockEthTime;
     }
 
     function collectFundsRaised() external presaleIsNotCancelled {
@@ -464,5 +550,53 @@ contract PresalePublic is ReentrancyGuard {
         }*/
 
         //return (_weiAmount * tokenMagnitude) / pricePerToken;
+    }
+
+    function getInfo() external view returns
+    (
+        PresaleInfo memory info
+    ) 
+    {
+        info = PresaleInfo (
+            presaleCreator,
+            address(token),
+            pricePerToken,
+            hardCap,
+            softCap,
+            tokensLeft,
+            tokensForLiquidity,
+            closeTimeVoting,
+            openTimePresale,
+            closeTimePresale,
+            cancelled,
+            liquidityAdded,
+            raisedAmount,
+            participants,
+            yesVotes,
+            noVotes
+        );
+    }
+
+    function getLiquidityInfo() external view returns (PresalePancakeSwapInfo memory info) {
+        info = PresalePancakeSwapInfo(
+            listingPrice,
+            liquidityLockDuration,
+            liquidityAllocation,
+            liquidityAllocationTime,
+            unlockEthTime
+        );
+    }
+
+    function getStringInfo() external view returns (PresaleStringInfo memory info) {
+        info = PresaleStringInfo(
+            saleTitle,
+            linkTelegram,
+            linkGithub,
+            linkTwitter,
+            linkWebsite,
+            linkLogo,
+            description,
+            whitepaper
+        );
     }
 }

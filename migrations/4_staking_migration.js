@@ -1,5 +1,10 @@
 const Staking = artifacts.require("Staking");
+const LessLibrary = artifacts.require("LessLibrary");
+const TestToken = artifacts.require("TestToken");
 
-module.exports = function (deployer) {
-  deployer.deploy(Staking, "0xa372d1d35041714092900B233934fB2D002755E2", "0xE751ffdC2a684EEbcaB9Dc95fEe05c083F963Bf1");
+module.exports = async function (deployer) {
+  const lessToken = await TestToken.deployed();
+  const library = await LessLibrary.deployed();
+  const staking = await deployer.deploy(Staking, lessToken.address, library.address);
+  console.log("Staking address: ", staking.address);
 };

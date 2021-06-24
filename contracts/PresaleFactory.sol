@@ -53,11 +53,8 @@ contract PresaleFactory {
         uint256 tokenPriceInWei;
         uint256 hardCapInWei;
         uint256 softCapInWei;
-        uint256 maxInvestInWei;
-        uint256 minInvestInWei;
         uint256 openTime;
         uint256 closeTime;
-        uint8 presaleType;
         bool liquidity;
         bool automatically;
         bool whitelisted;
@@ -97,11 +94,11 @@ contract PresaleFactory {
         PresaleInfo calldata _info,
         PresalePancakeSwapInfo calldata _cakeInfo,
         PresaleStringInfo calldata _stringInfo
-    ) external {
-        require(
+    ) external payable{
+        /*require(
             _info.presaleType == 0,
             "Use other function for other presale type"
-        );
+        );*/
         //timing check
         require(
             block.timestamp + safeLibrary.getVotingTime() <= _info.openTime &&
@@ -131,6 +128,24 @@ contract PresaleFactory {
                 safeLibrary.getDev()
             );
 
+        address presaleAddress = address(presale);
+        address payable payableAddress = payable(presaleAddress);
+
+        uint256 fee;
+
+        {
+            IUniswapV2Router02 uniswap = IUniswapV2Router02(safeLibrary.getUniswapRouter());
+            (uint256 feeFromLib, address tether) = safeLibrary.getUsdtFee();
+            address[] memory path = new address[](2);
+            path[0] = uniswap.WETH();
+            path[1] = tether;
+            uint256[] memory usdtFee = uniswap.getAmountsIn(feeFromLib, path);
+            require(msg.value >= usdtFee[0], "Too low msg.value");
+            fee = usdtFee[0];
+        }
+
+        require(fee > 0, "Wrong fee");
+
         uint256 maxLiqPoolTokenAmount =
             ((_info.hardCapInWei *
                 _cakeInfo.liquidityPercentageAllocation *
@@ -147,15 +162,10 @@ contract PresaleFactory {
             "Wrong parameters"
         );
         _token.transferFrom(msg.sender, address(presale), requiredTokenAmount);
+        payableAddress.transfer(fee);
 
-        initializePresalePublic(
-            presale,
-            maxTokensToBeSold,
-            maxLiqPoolTokenAmount,
-            _info,
-            _cakeInfo,
-            _stringInfo
-        );
+        //initialize
+        initializePresalePublic(presale, maxTokensToBeSold, maxLiqPoolTokenAmount, _info, _cakeInfo, _stringInfo);
 
         /*SafeTeslaLiquidityLock liquidityLock =
             new SafeTeslaLiquidityLock(

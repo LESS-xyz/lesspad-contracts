@@ -89,7 +89,12 @@ contract Staking is ReentrancyGuard {
         safeLibrary = LessLibrary(_newInfo);
     }
 
-    function getStakedAmount() public view returns(uint256) {
+    function getStakedAmount() external view returns(uint256) {
         return totalStakedAmount;
+    }
+
+    function getAccountInfo(address staker) external view returns (uint256, uint256, uint256) {
+        AccountInfo storage account = accountInfos[staker];
+        return (account.balance, account.lastStakedTimestamp, account.lastUnstakedTimestamp);
     }
 }

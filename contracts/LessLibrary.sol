@@ -2,16 +2,16 @@
 pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "./Staking.sol";
+import "./IStaking.sol";
 
 contract LessLibrary is Ownable {
     address[] private presaleAddresses; // track all presales created
 
     uint256 private minInvestorBalance = 15000 * 1e18;
-    uint256 private votingTime = 600; //tthree days
+    uint256 private votingTime = 3 days; //tthree days
     //uint256 private votingTime = 300;
-    uint256 private minStakeTime = 300; //one day
-    uint256 private minUnstakeTime = 1000; //six days
+    uint256 private minStakeTime = 1 days; //one day
+    uint256 private minUnstakeTime = 6 days; //six days
 
     address private factoryAddress;
 
@@ -19,12 +19,14 @@ contract LessLibrary is Ownable {
     uint256 private minCreatorStakedBalance = 8000 * 1e18; // minimum number of tokens to hold to launch rocket
 
     uint8 private feePercent = 2;
+    uint32 private usdtFee = 1 * 1e6;
 
     address private uniswapRouter = address(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D); // uniswapV2 Router
+    address private tether = address(0x110a13FC3efE6A245B50102D2d79B3E76125Ae83);
 
     address payable private lessVault;
     address private devAddress;
-    Staking public safeStakingPool;
+    IStaking public safeStakingPool;
 
     mapping(address => bool) private isPresale;
 
@@ -55,6 +57,15 @@ contract LessLibrary is Ownable {
         factoryAddress = _factory;
     }
 
+    function setUsdtFee(uint32 _newAmount) external onlyDev {
+        require(_newAmount > 0, "Wrong parameter");
+        usdtFee = _newAmount;
+    }
+
+    function getUsdtFee() external view onlyFactory returns(uint256, address) {
+        return (usdtFee, tether);
+    }
+
     function addPresaleAddress(address _presale)
         external
         onlyFactory
@@ -80,6 +91,11 @@ contract LessLibrary is Ownable {
         presaleAddresses[id] = _newAddress;
     }
 
+    function changeDev(address _newDev) external onlyDev {
+        require(_newDev != address(0), "Wrong new address");
+        devAddress = _newDev;
+    }
+
     function setVotingTime(uint256 _newVotingTime) external onlyDev {
         require(_newVotingTime > 0, "Wrong new time");
         votingTime = _newVotingTime;
@@ -87,7 +103,7 @@ contract LessLibrary is Ownable {
 
     function setStakingAddress(address _staking) external onlyDev {
         require(_staking != address(0));
-        safeStakingPool = Staking(_staking);
+        safeStakingPool = IStaking(_staking);
     }
 
     function getVotingTime() public view returns(uint256){
@@ -130,7 +146,7 @@ contract LessLibrary is Ownable {
     {
         uint256 balance;
         uint256 lastStakedTimestamp;
-        (balance, lastStakedTimestamp, ) = safeStakingPool.accountInfos(
+        (balance, lastStakedTimestamp, ) = safeStakingPool.getAccountInfo(
             address(sender)
         );
 

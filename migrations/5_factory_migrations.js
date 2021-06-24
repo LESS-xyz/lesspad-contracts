@@ -1,13 +1,18 @@
 const Factory = artifacts.require("PresaleFactory");
-//const TestToken = artifacts.require("TestToken");
+const TestToken = artifacts.require("TestToken");
+const LessLibrary = artifacts.require("LessLibrary");
+const Staking = artifacts.require("Staking");
 
-module.exports = function (deployer) {
+module.exports = async function (deployer) {
   return deployer.then(async () => {
+    const lessToken = await TestToken.deployed();
+    const library = await LessLibrary.deployed();
+    const staking = await Staking.deployed();
     const factory = await deployer.deploy(
         Factory,
-        "0xE751ffdC2a684EEbcaB9Dc95fEe05c083F963Bf1",
-        "0xa372d1d35041714092900B233934fB2D002755E2",
-        "0x9a44AaBd1305600B335Bde83760F165d2D742cFb"
+        library.address,
+        lessToken.address,
+        staking.address
     );
     console.log('Factory\'s address ', factory.address);
   })

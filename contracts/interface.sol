@@ -18,6 +18,8 @@ interface IUniswapV2Router02 {
             uint256 liquidity
         );
 
+    function getAmountsIn(uint amountOut, address[] memory path) external view returns (uint[] memory amounts);
+
     function factory() external pure returns (address);
     function WETH() external pure returns (address);
 }

@@ -1,0 +1,13 @@
+{
+    "tokenAddress": "0xbD08d24E3945fCc056926fE573412235A8151e04",
+    "tokenPrice": "100000000000000",
+    "softCap": "50000000000000000",
+    "hardCap": "1000000000000000000",
+    "openTime": "",
+    "closeTime": "",
+    "liquidity": "true",
+    "automatically": "true",
+    "whitelisted": "false",
+    "whitelist": [],
+    "vesting": "false"
+}
