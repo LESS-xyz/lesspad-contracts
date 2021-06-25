@@ -94,7 +94,7 @@ contract PresaleFactory {
         PresaleInfo calldata _info,
         PresalePancakeSwapInfo calldata _cakeInfo,
         PresaleStringInfo calldata _stringInfo
-    ) external payable{
+    ) external payable {
         /*require(
             _info.presaleType == 0,
             "Use other function for other presale type"
@@ -134,7 +134,8 @@ contract PresaleFactory {
         uint256 fee;
 
         {
-            IUniswapV2Router02 uniswap = IUniswapV2Router02(safeLibrary.getUniswapRouter());
+            IUniswapV2Router02 uniswap =
+                IUniswapV2Router02(safeLibrary.getUniswapRouter());
             (uint256 feeFromLib, address tether) = safeLibrary.getUsdtFee();
             address[] memory path = new address[](2);
             path[0] = uniswap.WETH();
@@ -165,7 +166,14 @@ contract PresaleFactory {
         payableAddress.transfer(fee);
 
         //initialize
-        initializePresalePublic(presale, maxTokensToBeSold, maxLiqPoolTokenAmount, _info, _cakeInfo, _stringInfo);
+        initializePresalePublic(
+            presale,
+            maxTokensToBeSold,
+            maxLiqPoolTokenAmount,
+            _info,
+            _cakeInfo,
+            _stringInfo
+        );
 
         /*SafeTeslaLiquidityLock liquidityLock =
             new SafeTeslaLiquidityLock(
@@ -266,17 +274,27 @@ contract PresaleFactory {
     ) internal {
         _presale.init(
             [msg.sender, _info.tokenAddress],
-            [_info.tokenPriceInWei,
-            _tokensForSale,
-            _tokensForLiquidity,
-            _info.softCapInWei,
-            _info.hardCapInWei],
-            _cakeInfo.liquidityPercentageAllocation,
+            [
+                _info.tokenPriceInWei,
+                _tokensForSale,
+                _tokensForLiquidity,
+                _info.softCapInWei,
+                _info.hardCapInWei,
+                _info.openTime,
+                _info.closeTime
+            ]
+            /*_cakeInfo.liquidityPercentageAllocation,
             [_cakeInfo.listingPriceInWei,
             _cakeInfo.lpTokensLockDurationInDays,
             _cakeInfo.liquidityAllocationTime,
             _info.openTime,
-            _info.closeTime]
+            _info.closeTime]*/
+        );
+        _presale.setUniswapInfo(
+            _cakeInfo.listingPriceInWei,
+            _cakeInfo.lpTokensLockDurationInDays,
+            _cakeInfo.liquidityPercentageAllocation,
+            _cakeInfo.liquidityAllocationTime
         );
         _presale.setStringInfo(
             _stringInfo.saleTitle,
