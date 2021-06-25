@@ -15,6 +15,8 @@ module.exports = async function (deployer) {
         staking.address
     );
     console.log('Factory\'s address ', factory.address);
+    await library.setStakingAddress(staking.address);
+    await library.setFactoryAddress(factory.address);
   })
   //deployer.deploy(Presale, "0x6619D419A27bb005a0a51DA2610d036133E72a72", "0x075FDA89Eb389734E563eafC22F5629D76FC2500");
 };

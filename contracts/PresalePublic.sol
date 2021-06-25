@@ -9,8 +9,8 @@ import "./interface.sol";
 contract PresalePublic is ReentrancyGuard {
     uint256 public id;
 
-    address factoryAddress;
-    address platformOwner;
+    address public factoryAddress;
+    address public platformOwner;
     LessLibrary public lessLib;
 
     PresaleInfo public generalInfo;
@@ -39,6 +39,7 @@ contract PresalePublic is ReentrancyGuard {
         uint256 closeTimeVoting;
         uint256 openTimePresale;
         uint256 closeTimePresale;
+        uint256 collectedFee;
         /*bool cancelled;
         bool liquidityAdded;
         uint256 raisedAmount;
@@ -103,13 +104,18 @@ contract PresalePublic is ReentrancyGuard {
         _;
     }
 
+    modifier notCreator() {
+        require(msg.sender != generalInfo.creator, "Have no permition");
+        _;
+    }
+
     modifier liquidityAdded() {
         require(intermediate.liquidityAdded);
         _;
     }
 
     modifier onlyWhenOpenVoting() {
-        require(block.timestamp <= generalInfo.closeTimeVoting);
+        require(block.timestamp <= generalInfo.closeTimeVoting, "Voting closed");
         _;
     }
 
@@ -117,7 +123,7 @@ contract PresalePublic is ReentrancyGuard {
         uint256 nowTime = block.timestamp;
         require(
             nowTime >= generalInfo.openTimePresale &&
-                nowTime <= generalInfo.closeTimePresale
+                nowTime <= generalInfo.closeTimePresale, "Presale is not open yet or closed"
         );
         _;
     }
@@ -130,7 +136,7 @@ contract PresalePublic is ReentrancyGuard {
     modifier votesPassed() {
         require(
             intermediate.yesVotes >= intermediate.noVotes &&
-                intermediate.yesVotes >= lessLib.getMinYesVotesThreshold(),
+                intermediate.yesVotes >= lessLib.getMinYesVotesThreshold() && block.timestamp >= generalInfo.closeTimeVoting,
             "Votes not passed"
         );
         _;
@@ -138,18 +144,18 @@ contract PresalePublic is ReentrancyGuard {
 
     constructor(
         address _factory,
-        address _library,
-        address _platformOwner,
-        address _devAddress
-    ) payable {
+        address _library
+        //address payable _platformOwner,
+        //address _devAddress
+    )  {
         require(_factory != address(0));
         require(_library != address(0));
-        require(_platformOwner != address(0));
-        require(_devAddress != address(0));
+        //require(_platformOwner != address(0));
+        //require(_devAddress != address(0));
         factoryAddress = _factory;
         lessLib = LessLibrary(_library);
-        platformOwner = _platformOwner;
-        devAddress = _devAddress;
+        platformOwner = lessLib.owner();
+        devAddress = lessLib.getDev();
         //generalInfo.closeTimeVoting = block.timestamp + lessLib.getVotingTime();
     }
 
@@ -159,7 +165,7 @@ contract PresalePublic is ReentrancyGuard {
 
     function init(
         address[2] memory _creatorToken,
-        uint256[7] memory _priceTokensForSaleLiquiditySoftHardOpenClose
+        uint256[8] memory _priceTokensForSaleLiquiditySoftHardOpenCloseFee
     ) external onlyFabric {
         require(
             _creatorToken[0] != address(0) && _creatorToken[1] != address(0),
@@ -167,42 +173,44 @@ contract PresalePublic is ReentrancyGuard {
         );
         require(!initiate, "Function can work only once");
         require(
-            _priceTokensForSaleLiquiditySoftHardOpenClose[0] > 0,
+            _priceTokensForSaleLiquiditySoftHardOpenCloseFee[0] > 0,
             "Price should be more then zero"
         );
         require(
-            _priceTokensForSaleLiquiditySoftHardOpenClose[5] > 0 &&
-                _priceTokensForSaleLiquiditySoftHardOpenClose[6] > 0 &&
-                _priceTokensForSaleLiquiditySoftHardOpenClose[5] <
-                _priceTokensForSaleLiquiditySoftHardOpenClose[6],
+            _priceTokensForSaleLiquiditySoftHardOpenCloseFee[5] > 0 &&
+                _priceTokensForSaleLiquiditySoftHardOpenCloseFee[6] > 0 &&
+                _priceTokensForSaleLiquiditySoftHardOpenCloseFee[5] <
+                _priceTokensForSaleLiquiditySoftHardOpenCloseFee[6],
             "Wrong time presale interval"
         );
         require(
-            _priceTokensForSaleLiquiditySoftHardOpenClose[3] > 0 &&
-                _priceTokensForSaleLiquiditySoftHardOpenClose[4] > 0,
+            _priceTokensForSaleLiquiditySoftHardOpenCloseFee[3] > 0 &&
+                _priceTokensForSaleLiquiditySoftHardOpenCloseFee[4] > 0,
             "Wron soft or hard cup values"
         );
         uint256 closeVoting = block.timestamp + lessLib.getVotingTime();
         require(
-            _priceTokensForSaleLiquiditySoftHardOpenClose[3] >= closeVoting,
+            _priceTokensForSaleLiquiditySoftHardOpenCloseFee[3] >= closeVoting,
             "Voting and investment should not overlap"
         );
         require(
-            _priceTokensForSaleLiquiditySoftHardOpenClose[1] != 0 &&
-                _priceTokensForSaleLiquiditySoftHardOpenClose[2] != 0,
+            _priceTokensForSaleLiquiditySoftHardOpenCloseFee[1] != 0 &&
+                _priceTokensForSaleLiquiditySoftHardOpenCloseFee[2] != 0,
             "Not null tokens amount"
         );
+        require(_priceTokensForSaleLiquiditySoftHardOpenCloseFee[7]>0, "No fee");
         generalInfo = PresaleInfo(
             payable(_creatorToken[0]),
             IERC20(_creatorToken[1]),
-            _priceTokensForSaleLiquiditySoftHardOpenClose[0],
-            _priceTokensForSaleLiquiditySoftHardOpenClose[4],
-            _priceTokensForSaleLiquiditySoftHardOpenClose[3],
-            _priceTokensForSaleLiquiditySoftHardOpenClose[1],
-            _priceTokensForSaleLiquiditySoftHardOpenClose[2],
+            _priceTokensForSaleLiquiditySoftHardOpenCloseFee[0],
+            _priceTokensForSaleLiquiditySoftHardOpenCloseFee[4],
+            _priceTokensForSaleLiquiditySoftHardOpenCloseFee[3],
+            _priceTokensForSaleLiquiditySoftHardOpenCloseFee[1],
+            _priceTokensForSaleLiquiditySoftHardOpenCloseFee[2],
             closeVoting,
-            _priceTokensForSaleLiquiditySoftHardOpenClose[5],
-            _priceTokensForSaleLiquiditySoftHardOpenClose[6]
+            _priceTokensForSaleLiquiditySoftHardOpenCloseFee[5],
+            _priceTokensForSaleLiquiditySoftHardOpenCloseFee[6],
+            _priceTokensForSaleLiquiditySoftHardOpenCloseFee[7]
         );
 
         /*uniswapInfo = PresaleUniswapInfo(
@@ -261,7 +269,7 @@ contract PresalePublic is ReentrancyGuard {
         );
     }
 
-    function vote(bool yes) external onlyWhenOpenVoting presaleIsNotCancelled {
+    function vote(bool yes) external onlyWhenOpenVoting presaleIsNotCancelled notCreator{
         uint256 safeBalance = lessLib.getStakedSafeBalance(msg.sender);
 
         require(
@@ -285,6 +293,7 @@ contract PresalePublic is ReentrancyGuard {
         onlyWhenOpenPresale
         votesPassed
         nonReentrant
+        notCreator
     {
         uint256 reservedTokens = getTokenAmount(msg.value);
         uint256 tokensLeft = generalInfo.tokensForSaleLeft;
@@ -487,6 +496,11 @@ contract PresalePublic is ReentrancyGuard {
         }
     }
 
+    function collectFee() external onlyPlatformOwner nonReentrant votesPassed{
+        payable(platformOwner).transfer(generalInfo.collectedFee);
+        generalInfo.collectedFee = 0;
+    }
+
     function changeCloseTimeVoting(uint256 _newCloseTime)
         external
         presaleIsNotCancelled
@@ -535,8 +549,15 @@ contract PresalePublic is ReentrancyGuard {
     }
 
     function setPresaleId(uint256 _id) external onlyFabric {
-        require(id != _id, "Wrong parameter");
+        if(id != 0)
+        {
+            require(id != _id, "Wrong parameter");
+        }
         id = _id;
+    }
+
+    function getMyVote() external view returns(uint256) {
+        return voters[msg.sender];
     }
 
     function getTokenAmount(uint256 _weiAmount)

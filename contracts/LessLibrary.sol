@@ -5,7 +5,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "./IStaking.sol";
 
 contract LessLibrary is Ownable {
-    address[] private presaleAddresses; // track all presales created
+    PresaleInfo[] private presaleAddresses; // track all presales created
 
     uint256 private minInvestorBalance = 15000 * 1e18;
     uint256 private votingTime = 3 days; //tthree days
@@ -29,6 +29,13 @@ contract LessLibrary is Ownable {
     IStaking public safeStakingPool;
 
     mapping(address => bool) private isPresale;
+
+    struct PresaleInfo {
+        bytes32 title;
+        address presaleAddress;
+        string description;
+        bool isCertified;
+    }
 
     modifier onlyDev() {
         require(owner() == msg.sender || msg.sender == devAddress, "onlyDev");
@@ -66,13 +73,15 @@ contract LessLibrary is Ownable {
         return (usdtFee, tether);
     }
 
-    function addPresaleAddress(address _presale)
+    function addPresaleAddress(address _presale, bytes32 _title, string memory _description, bool _type)
         external
         onlyFactory
         returns (uint256)
     {
-        presaleAddresses.push(_presale);
+        presaleAddresses.push(PresaleInfo(_title, _presale, _description, _type));
         isPresale[_presale] = true;
+        //uint256 _id = presaleAddresses.length - 1;
+        //forAllPoolsSearch[_id] = PresaleInfo(_title, _presale, _description, _type);
         return presaleAddresses.length - 1;
     }
 
@@ -81,14 +90,14 @@ contract LessLibrary is Ownable {
     }
 
     function getPresaleAddress(uint256 id) external view returns (address) {
-        return presaleAddresses[id];
+        return presaleAddresses[id].presaleAddress;
     }
 
     function setPresaleAddress(uint256 id, address _newAddress)
         external
         onlyDev
     {
-        presaleAddresses[id] = _newAddress;
+        presaleAddresses[id].presaleAddress = _newAddress;
     }
 
     function changeDev(address _newDev) external onlyDev {
@@ -170,5 +179,9 @@ contract LessLibrary is Ownable {
 
     function getVaultAddress() external view onlyPresale returns(address payable){
         return lessVault;
+    }
+
+    function getArrForSearch() external view returns(PresaleInfo[] memory) {
+        return presaleAddresses;
     }
 }

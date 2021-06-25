@@ -1,10 +1,10 @@
 {
-    "title": "Rita Token Presale", 
-    "telegram": "https://telegra.ph/galaktika-01-04",
-    "github": "https://github.com/RitaTcepeleva", 
-    "twitter": "https://twitter.com/RitaBot17", 
-    "website": "@rittaspot", 
-    "logo": "https://i.pinimg.com/236x/da/8d/3c/da8d3c180a80a0f10a7f009a08466186.jpg", 
+    "saleTitle": "0x7269746100000000000000000000000000000000000000000000000000000000", 
+    "linkTelegram": "0x7269746100000000000000000000000000000000000000000000000000000000",
+    "linkGithub": "0x7269746100000000000000000000000000000000000000000000000000000000", 
+    "linkTwitter": "0x7269746100000000000000000000000000000000000000000000000000000000", 
+    "linkWebsite": "0x7269746100000000000000000000000000000000000000000000000000000000", 
+    "linkLogo": "https://i.pinimg.com/236x/da/8d/3c/da8d3c180a80a0f10a7f009a08466186.jpg", 
     "description": "Description of Rita Presale", 
     "whitepaper": "whitepaper paper"
 }

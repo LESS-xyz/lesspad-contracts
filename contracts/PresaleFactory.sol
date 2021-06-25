@@ -55,11 +55,19 @@ contract PresaleFactory {
         uint256 softCapInWei;
         uint256 openTime;
         uint256 closeTime;
-        bool liquidity;
+        /*bool liquidity;
         bool automatically;
         bool whitelisted;
         address[] whitelist;
+        bool vesting;*/
+    }
+
+    struct CertifiedAddition {
+        bool liquidity;
+        bool automatically;
         bool vesting;
+        bool whitelisted;
+        address[] whitelist;
     }
 
     struct PresalePancakeSwapInfo {
@@ -101,7 +109,7 @@ contract PresaleFactory {
         );*/
         //timing check
         require(
-            block.timestamp + safeLibrary.getVotingTime() <= _info.openTime &&
+                block.timestamp + safeLibrary.getVotingTime() <= _info.openTime &&
                 _info.openTime < _info.closeTime &&
                 _info.closeTime < _cakeInfo.liquidityAllocationTime,
             "Wrong timing"
@@ -122,18 +130,18 @@ contract PresaleFactory {
         ERC20 _token = ERC20(_info.tokenAddress);
         PresalePublic presale =
             new PresalePublic(
-                address(this),
+                //address(this),
                 address(safeLibrary),
-                safeLibrary.owner(),
+                //safeLibrary.owner(),
                 safeLibrary.getDev()
             );
 
         address presaleAddress = address(presale);
-        address payable payableAddress = payable(presaleAddress);
+        address payable payableAddress = payable(address(presaleAddress));
 
-        uint256 fee;
-
-        {
+        //uint256 fee;
+        uint256 fee = 500000000000000000;
+        /*{
             IUniswapV2Router02 uniswap =
                 IUniswapV2Router02(safeLibrary.getUniswapRouter());
             (uint256 feeFromLib, address tether) = safeLibrary.getUsdtFee();
@@ -143,15 +151,14 @@ contract PresaleFactory {
             uint256[] memory usdtFee = uniswap.getAmountsIn(feeFromLib, path);
             require(msg.value >= usdtFee[0], "Too low msg.value");
             fee = usdtFee[0];
-        }
-
-        require(fee > 0, "Wrong fee");
+        }*/
+        require(msg.value >= fee && fee > 0, "Not enough ETH");
 
         uint256 maxLiqPoolTokenAmount =
             ((_info.hardCapInWei *
                 _cakeInfo.liquidityPercentageAllocation *
                 (uint256(10)**uint256(token.decimals()))) /
-                _cakeInfo.listingPriceInWei) * 100;
+                (_cakeInfo.listingPriceInWei * 100));
 
         uint256 maxTokensToBeSold =
             (((_info.hardCapInWei * 110) / 100) *
@@ -168,28 +175,15 @@ contract PresaleFactory {
         //initialize
         initializePresalePublic(
             presale,
-            maxTokensToBeSold,
+            [maxTokensToBeSold,
             maxLiqPoolTokenAmount,
+            fee],
             _info,
             _cakeInfo,
             _stringInfo
         );
 
-        /*SafeTeslaLiquidityLock liquidityLock =
-            new SafeTeslaLiquidityLock(
-                ERC20(
-                    safeLibrary.getCakeV2LPAddress(
-                        address(_token),
-                        safeLibrary.getWBNB()
-                    )
-                ),
-                _cakeInfo.liquidityAddingTime +
-                    (_cakeInfo.lpTokensLockDurationInDays * 1 days),
-                msg.sender,
-                address(0)
-            );*/
-
-        uint256 presaleId = safeLibrary.addPresaleAddress(address(presale));
+        uint256 presaleId = safeLibrary.addPresaleAddress(address(presale), _stringInfo.saleTitle, _stringInfo.description, false);
         presale.setPresaleId(presaleId);
         emit PublicPresaleCreated(
             presaleId,
@@ -266,8 +260,7 @@ contract PresaleFactory {
 
     function initializePresalePublic(
         PresalePublic _presale,
-        uint256 _tokensForSale,
-        uint256 _tokensForLiquidity,
+        uint256[3] memory _tokensForSaleLiquidityFee,
         PresaleInfo calldata _info,
         PresalePancakeSwapInfo calldata _cakeInfo,
         PresaleStringInfo calldata _stringInfo
@@ -276,12 +269,13 @@ contract PresaleFactory {
             [msg.sender, _info.tokenAddress],
             [
                 _info.tokenPriceInWei,
-                _tokensForSale,
-                _tokensForLiquidity,
+                _tokensForSaleLiquidityFee[0],
+                _tokensForSaleLiquidityFee[1],
                 _info.softCapInWei,
                 _info.hardCapInWei,
                 _info.openTime,
-                _info.closeTime
+                _info.closeTime,
+                _tokensForSaleLiquidityFee[2]
             ]
             /*_cakeInfo.liquidityPercentageAllocation,
             [_cakeInfo.listingPriceInWei,
