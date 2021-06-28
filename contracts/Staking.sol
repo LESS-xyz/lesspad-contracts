@@ -64,22 +64,31 @@ contract Staking is ReentrancyGuard {
 
         require(account.balance > 0, "Nothing to unstake");
         require(_amount > 0, "Invalid amount");
-        require(
+        /*require(
             minUnstakeTime == 0 ||
                 (account.lastUnstakedTimestamp + minUnstakeTime <=
                     block.timestamp),
             "Invalid Unstake Time"
-        );
+        );*/
         if (account.balance < _amount) {
             _amount = account.balance;
         }
         account.balance = account.balance - _amount;
         totalStakedAmount -= _amount;
+        uint256 feeAmount = 0;
+        if(account.lastUnstakedTimestamp + minUnstakeTime <= block.timestamp) {
+            feeAmount = _amount / 100;
+            _amount = _amount - feeAmount;
+
+        }
         account.lastUnstakedTimestamp = block.timestamp;
 
         if (account.balance == 0) {
             account.lastStakedTimestamp = 0;
             account.lastUnstakedTimestamp = 0;
+        }
+        if (feeAmount != 0){
+            safeToken.transfer(safeLibrary.owner(), feeAmount);
         }
         safeToken.transfer(msg.sender, _amount);
         emit Unstaked(msg.sender, _amount);

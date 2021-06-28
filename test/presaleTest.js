@@ -1,12 +1,24 @@
 const { expect } = require('chai');
 const { BN, expectEvent, expectRevert, makeInterfaceId, time } = require('@openzeppelin/test-helpers');
+const { web3 } = require('@openzeppelin/test-helpers/src/setup');
 //const { exitCode } = require('process');
+const ERC20 = artifacts.require("ERC20");
 const TestToken = artifacts.require('TestToken');
 const TestTokenTwo = artifacts.require('TestTokenTwo');
 const LessLibrary = artifacts.require('LessLibrary');
 const PresaleFactory = artifacts.require('PresaleFactory');
 const PresalePublic = artifacts.require('PresalePublic');
 const Staking = artifacts.require('Staking');
+//pancake artifacts
+const WETH = artifacts.require('WETH');
+let wethInst;
+const PancakeFactory = artifacts.require('PancakeFactory');
+let pancakeFactoryInstant;
+const PancakeRouter = artifacts.require('PancakeRouter');
+let pancakeRouterInstant;
+const PancakePair = artifacts.require('PancakePair');
+let pancakePairInstant;
+//let pancakePairInst = [];*/
 
 const MINUS_ONE = new BN(-1);
 const ZERO = new BN(0);
@@ -63,6 +75,21 @@ contract (
             library = await LessLibrary.deployed();
             staking = await Staking.deployed();
             factory = await PresaleFactory.deployed();
+            wethInst = await WETH.new(
+                { from: deployer }
+            );
+        
+            pancakeFactoryInstant = await PancakeFactory.new(
+                deployer,
+                { from: deployer }
+            );
+        
+            pancakeRouterInstant = await PancakeRouter.new(
+                pancakeFactoryInstant.address,
+                wethInst.address,
+                { from: deployer }
+            );
+            library.setUniswapRouter(pancakeRouterInstant.address);
         })
 
         it("Approve", async()=> {
@@ -73,7 +100,7 @@ contract (
             );
             await lessToken.approve(
                 staking.address,
-                ONE_THOUSAND_TOKENS,
+                ONE_THOUSAND_TOKENS.mul(ONE_HUNDRED),
                 {from: account_two}
             );
             await lessToken.approve(
@@ -144,6 +171,8 @@ contract (
             const receipt = await factory.createPresalePublic(info, liquidityInfo, stringInfo, {from: account_one, value: ONE_HALF_TOKEN});
             const presaleAddress = await library.getPresaleAddress(ZERO);
             const presale = await PresalePublic.at(presaleAddress);
+            /*let presaleEthBalance = await web3.eth.getBalance(presale.address);
+            console.log("ETH BALANCE: ",presaleEthBalance.toString());*/
             await time.increase(time.duration.minutes(30));
             await presale.vote(true, {from: account_two});
             await time.increase(time.duration.minutes(5));
@@ -156,11 +185,64 @@ contract (
             //console.log("TWO: ", voteTwo.toString(), "\nTHREE: ", voteThree.toString());
             await time.increase(time.duration.days(2));
             await expectRevert(presale.invest({from: account_three, value: ONE_HALF_TOKEN}), "Presale is not open yet or closed");
+            await staking.stake(ONE_THOUSAND_TOKENS, {from: account_two});
             await time.increase(time.duration.days(1));
             await presale.collectFee({from: account_one});
             //await lessToken.mint(account_three, (new BN(15)).mul(ONE_THOUSAND_TOKENS));
+            let genInfo = await presale.getGenInfo();
+            console.log("FOR SALE: ",genInfo[0].toString(), "\nFOR LIQ: ", genInfo[1].toString());
+            await presale.invest({from: account_three, value: ONE_HALF_TOKEN});
+            genInfo = await presale.getGenInfo();
+            console.log("FOR SALE: ",genInfo[0].toString(), "\nFOR LIQ: ", genInfo[1].toString());
+            await expectRevert(presale.withdrawInvestment(account_three, ONE_HALF_TOKEN, {from: account_three}),"Couldn't withdraw investments after softCap collection");
+            let balanceEthOTwo = await web3.eth.getBalance(account_two);
+            console.log(balanceEthOTwo.toString());
+            await expectRevert(presale.invest({from: account_two, value: ONE_TOKEN.sub(TWO_TOKEN.div(TEN))}),"Not enough tokens left");
+            await presale.invest({from: account_two, value: ONE_HALF_TOKEN});
+            await expectRevert(presale.invest({from: account_three, value: ONE_TOKEN.div(TEN)}), "Hard cap reached");
 
-            //await presale.invest({from: account_three, value: ONE_HALF_TOKEN});
+            await expectRevert(presale.addLiquidity(),"Too early to adding liquidity");
+            await time.increase(time.duration.days(6));
+            await expectRevert(presale.collectFundsRaised({from:account_one}), "Add liquidity");
+            await presale.addLiquidity();
+            const pairAddr = await pancakeFactoryInstant.getPair(wethInst.address, ritaToken.address);
+            console.log("PAIR ADDRESS: ", pairAddr);
+            pancakePairInstant = await PancakePair.at(pairAddr);
+            const reserve = await pancakePairInstant.getReserves();
+            console.log("RESERVES: ", reserve._reserve0.toString(), " ", reserve._reserve1.toString()); //норм работает
+
+            const ritaBalanceOneBefore = await ritaToken.balanceOf(account_two);
+            const ritaBalanceTwoBefore = await ritaToken.balanceOf(account_three);
+            await presale.claimTokens({from:account_two});
+            await presale.claimTokens({from:account_three});
+            const ritaBalanceOneAfetr = await ritaToken.balanceOf(account_two);
+            const ritaBalanceTwoAfetr = await ritaToken.balanceOf(account_three);
+            expect(ritaBalanceOneAfetr.sub(ritaBalanceOneBefore)).bignumber.equal(ONE_THOUSAND_TOKENS.mul(FIVE));
+            expect(ritaBalanceTwoAfetr.sub(ritaBalanceTwoBefore)).bignumber.equal(ONE_THOUSAND_TOKENS.mul(FIVE));
+            let ritaContractBalance = await ritaToken.balanceOf(presale.address);
+            expect(ritaContractBalance).bignumber.equal(ONE_THOUSAND_TOKENS);
+
+            const vaultBalanceBefore = await web3.eth.getBalance(vault);
+            const creatorBalanceBefore = await web3.eth.getBalance(account_one);
+            console.log("VAULT BEFORE: ", vaultBalanceBefore.toString(), "\nCREATOR BEFORE: ", creatorBalanceBefore.toString());
+            await presale.collectFundsRaised({from:account_one});
+            const vaultBalanceAfter = await web3.eth.getBalance(vault);
+            const creatorBalanceAfter = await web3.eth.getBalance(account_one);
+            console.log("VAULT AFTER: ", vaultBalanceAfter, "\nCREATOR AFTER: ", creatorBalanceAfter); //норм
+            await expectRevert(presale.refundLpTokens({from:account_one}), "Too early");
+            const lpToken = await ERC20.at(pairAddr);
+            let lpContractBalance = await lpToken.balanceOf(presale.address);
+            console.log("LP CONSTRCT BALANCE: ", lpContractBalance.toString());
+            await time.increase(time.duration.days(10));
+            await presale.refundLpTokens({from:account_one});
+            lpContractBalance = await lpToken.balanceOf(presale.address);
+            expect(lpContractBalance).bignumber.equal(ZERO);
+            await presale.getUnsoldTokens({from: account_one});
+            ritaContractBalance = await ritaToken.balanceOf(presale.address);
+            expect(ritaContractBalance).bignumber.equal(ZERO);
+            //expect(vaultBalanceAfter.sub(vaultBalanceBefore)).bignumber.equal(ONE_TOKEN.mul(TWO).div(ONE_HUNDRED));
+            //expect(creatorBalanceAfter.sub(creatorBalanceBefore)).bignumber.equal(ONE_TOKEN.sub(ONE_TOKEN.mul(TWO).div(ONE_HUNDRED)));
+            //await expectRevert(presale.addLiquidity(),"Too early to adding liquidity");
             /*await expectRevert(presale.vote(true, {from: account_three}), "Voting closed");
             await time.increase(time.duration.days(2));
             await expectRevert(presale.invest({from: account_three, value: new BN(1624755600)}), "Votes not passed");*/

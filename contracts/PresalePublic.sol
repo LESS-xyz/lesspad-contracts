@@ -27,6 +27,7 @@ contract PresalePublic is ReentrancyGuard {
     mapping(address => uint256) public voters;
     mapping(address => bool) public claimed; // if true, it means investor already claimed the tokens or got a refund
     mapping(address => Investment) public investments; // total wei invested per address
+    mapping(address => bool) public whitelist;
 
     struct PresaleInfo {
         address payable creator;
@@ -36,6 +37,7 @@ contract PresalePublic is ReentrancyGuard {
         uint256 softCapInWei;
         uint256 tokensForSaleLeft;
         uint256 tokensForLiquidityLeft;
+        uint256 openTimeVoting;
         uint256 closeTimeVoting;
         uint256 openTimePresale;
         uint256 closeTimePresale;
@@ -51,6 +53,7 @@ contract PresalePublic is ReentrancyGuard {
     struct IntermediateVariables {
         bool cancelled;
         bool liquidityAdded;
+        uint256 beginingAmount;
         uint256 raisedAmount;
         uint256 participants;
         uint256 yesVotes;
@@ -110,7 +113,7 @@ contract PresalePublic is ReentrancyGuard {
     }
 
     modifier liquidityAdded() {
-        require(intermediate.liquidityAdded);
+        require(intermediate.liquidityAdded, "Add liquidity");
         _;
     }
 
@@ -142,20 +145,30 @@ contract PresalePublic is ReentrancyGuard {
         _;
     }
 
+    modifier openRegister() {
+        require(block.timestamp >= generalInfo.openTimePresale - 86400 && block.timestamp < generalInfo.openTimePresale, "Register is closed or not open yet");
+        _;
+    }
+
+    modifier inWhitelist() {
+        require(whitelist[msg.sender] || lessLib.getStakedSafeBalance(msg.sender) < 20000 * tokenMagnitude, "You're not in whitelist");
+        _;
+    }
+
     constructor(
         address _factory,
-        address _library
-        //address payable _platformOwner,
-        //address _devAddress
+        address _library,
+        address _platformOwner,
+        address _devAddress
     )  {
         require(_factory != address(0));
         require(_library != address(0));
-        //require(_platformOwner != address(0));
-        //require(_devAddress != address(0));
-        factoryAddress = _factory;
+        require(_platformOwner != address(0));
+        require(_devAddress != address(0));
         lessLib = LessLibrary(_library);
-        platformOwner = lessLib.owner();
-        devAddress = lessLib.getDev();
+        factoryAddress = _factory;
+        platformOwner = _platformOwner;
+        devAddress = _devAddress;
         //generalInfo.closeTimeVoting = block.timestamp + lessLib.getVotingTime();
     }
 
@@ -165,7 +178,7 @@ contract PresalePublic is ReentrancyGuard {
 
     function init(
         address[2] memory _creatorToken,
-        uint256[8] memory _priceTokensForSaleLiquiditySoftHardOpenCloseFee
+        uint256[9] memory _priceTokensForSaleLiquiditySoftHardOpenOpenCloseFee
     ) external onlyFabric {
         require(
             _creatorToken[0] != address(0) && _creatorToken[1] != address(0),
@@ -173,56 +186,51 @@ contract PresalePublic is ReentrancyGuard {
         );
         require(!initiate, "Function can work only once");
         require(
-            _priceTokensForSaleLiquiditySoftHardOpenCloseFee[0] > 0,
+            _priceTokensForSaleLiquiditySoftHardOpenOpenCloseFee[0] > 0,
             "Price should be more then zero"
         );
         require(
-            _priceTokensForSaleLiquiditySoftHardOpenCloseFee[5] > 0 &&
-                _priceTokensForSaleLiquiditySoftHardOpenCloseFee[6] > 0 &&
-                _priceTokensForSaleLiquiditySoftHardOpenCloseFee[5] <
-                _priceTokensForSaleLiquiditySoftHardOpenCloseFee[6],
+            _priceTokensForSaleLiquiditySoftHardOpenOpenCloseFee[6] > 0 &&
+                _priceTokensForSaleLiquiditySoftHardOpenOpenCloseFee[7] > 0 &&
+                _priceTokensForSaleLiquiditySoftHardOpenOpenCloseFee[6] <
+                _priceTokensForSaleLiquiditySoftHardOpenOpenCloseFee[7],
             "Wrong time presale interval"
         );
         require(
-            _priceTokensForSaleLiquiditySoftHardOpenCloseFee[3] > 0 &&
-                _priceTokensForSaleLiquiditySoftHardOpenCloseFee[4] > 0,
+            _priceTokensForSaleLiquiditySoftHardOpenOpenCloseFee[3] > 0 &&
+                _priceTokensForSaleLiquiditySoftHardOpenOpenCloseFee[4] > 0,
             "Wron soft or hard cup values"
         );
-        uint256 closeVoting = block.timestamp + lessLib.getVotingTime();
+        require(_priceTokensForSaleLiquiditySoftHardOpenOpenCloseFee[5] >= block.timestamp + 86400, "Wrong open voting time");
+        uint256 closeVoting = _priceTokensForSaleLiquiditySoftHardOpenOpenCloseFee[5] + lessLib.getVotingTime();
         require(
-            _priceTokensForSaleLiquiditySoftHardOpenCloseFee[3] >= closeVoting,
+            _priceTokensForSaleLiquiditySoftHardOpenOpenCloseFee[6] >= closeVoting,
             "Voting and investment should not overlap"
         );
         require(
-            _priceTokensForSaleLiquiditySoftHardOpenCloseFee[1] != 0 &&
-                _priceTokensForSaleLiquiditySoftHardOpenCloseFee[2] != 0,
+            _priceTokensForSaleLiquiditySoftHardOpenOpenCloseFee[1] != 0 &&
+                _priceTokensForSaleLiquiditySoftHardOpenOpenCloseFee[2] != 0,
             "Not null tokens amount"
         );
-        require(_priceTokensForSaleLiquiditySoftHardOpenCloseFee[7]>0, "No fee");
+        require(_priceTokensForSaleLiquiditySoftHardOpenOpenCloseFee[8]>0, "No fee");
         generalInfo = PresaleInfo(
             payable(_creatorToken[0]),
             IERC20(_creatorToken[1]),
-            _priceTokensForSaleLiquiditySoftHardOpenCloseFee[0],
-            _priceTokensForSaleLiquiditySoftHardOpenCloseFee[4],
-            _priceTokensForSaleLiquiditySoftHardOpenCloseFee[3],
-            _priceTokensForSaleLiquiditySoftHardOpenCloseFee[1],
-            _priceTokensForSaleLiquiditySoftHardOpenCloseFee[2],
+            _priceTokensForSaleLiquiditySoftHardOpenOpenCloseFee[0],
+            _priceTokensForSaleLiquiditySoftHardOpenOpenCloseFee[4],
+            _priceTokensForSaleLiquiditySoftHardOpenOpenCloseFee[3],
+            _priceTokensForSaleLiquiditySoftHardOpenOpenCloseFee[1],
+            _priceTokensForSaleLiquiditySoftHardOpenOpenCloseFee[2],
+            _priceTokensForSaleLiquiditySoftHardOpenOpenCloseFee[5],
             closeVoting,
-            _priceTokensForSaleLiquiditySoftHardOpenCloseFee[5],
-            _priceTokensForSaleLiquiditySoftHardOpenCloseFee[6],
-            _priceTokensForSaleLiquiditySoftHardOpenCloseFee[7]
+            _priceTokensForSaleLiquiditySoftHardOpenOpenCloseFee[6],
+            _priceTokensForSaleLiquiditySoftHardOpenOpenCloseFee[7],
+            _priceTokensForSaleLiquiditySoftHardOpenOpenCloseFee[8]
         );
-
-        /*uniswapInfo = PresaleUniswapInfo(
-            _liqPriceDurationAllocTimeOpenClose[0],
-            _liqPriceDurationAllocTimeOpenClose[1],
-            _liquidityAlloc,
-            _liqPriceDurationAllocTimeOpenClose[2],
-            0
-        );*/
 
         uint256 tokenDecimals = ERC20(_creatorToken[1]).decimals();
         tokenMagnitude = uint256(10)**uint256(tokenDecimals);
+        intermediate.beginingAmount = _priceTokensForSaleLiquiditySoftHardOpenOpenCloseFee[1];
         initiate = true;
     }
 
@@ -269,6 +277,11 @@ contract PresalePublic is ReentrancyGuard {
         );
     }
 
+    function register() external openRegister {
+        require(lessLib.getStakedSafeBalance(msg.sender) >= 20000 * tokenMagnitude || !whitelist[msg.sender], "You're already in whitelist");
+        whitelist[msg.sender] = true;
+    }
+
     function vote(bool yes) external onlyWhenOpenVoting presaleIsNotCancelled notCreator{
         uint256 safeBalance = lessLib.getStakedSafeBalance(msg.sender);
 
@@ -294,23 +307,46 @@ contract PresalePublic is ReentrancyGuard {
         votesPassed
         nonReentrant
         notCreator
+        inWhitelist
     {
+        address sender = msg.sender;
+        uint256 tokensLeft;
+        uint256 nowTime = block.timestamp;
+        if(nowTime < generalInfo.openTimePresale + 3600){
+            require(lessLib.getStakedSafeBalance(sender) >= 200000*tokenMagnitude, "You have no invest permition");
+            tokensLeft = intermediate.beginingAmount * 30 / 100;
+        }
+        else if(nowTime < generalInfo.openTimePresale + 5400){
+            require(lessLib.getStakedSafeBalance(sender) < 200000*tokenMagnitude && lessLib.getStakedSafeBalance(sender) >= 50000*tokenMagnitude, "You have no invest permition");
+            tokensLeft = (intermediate.beginingAmount - generalInfo.tokensForSaleLeft) + (intermediate.beginingAmount * 20 / 100);
+        }
+        else if(nowTime < generalInfo.openTimePresale + 6300){
+            require(lessLib.getStakedSafeBalance(sender) < 50000*tokenMagnitude && lessLib.getStakedSafeBalance(sender) >= 20000*tokenMagnitude, "You have no invest permition");
+            tokensLeft = (intermediate.beginingAmount - generalInfo.tokensForSaleLeft) + (intermediate.beginingAmount * 15 / 100);
+        }
+        else if(nowTime < generalInfo.openTimePresale + 6900){
+            require(lessLib.getStakedSafeBalance(sender) < 20000*tokenMagnitude && lessLib.getStakedSafeBalance(sender) >= 5000*tokenMagnitude, "You have no invest permition");
+            tokensLeft = (intermediate.beginingAmount - generalInfo.tokensForSaleLeft) + (intermediate.beginingAmount * 25 / 100);
+        }
+        else {
+            tokensLeft = generalInfo.tokensForSaleLeft;
+        }
         uint256 reservedTokens = getTokenAmount(msg.value);
-        uint256 tokensLeft = generalInfo.tokensForSaleLeft;
+        //tokensLeft = generalInfo.tokensForSaleLeft;
         require(
             intermediate.raisedAmount < generalInfo.hardCapInWei,
             "Hard cap reached"
         );
-        require(tokensLeft >= reservedTokens);
-        require(msg.value > 0);
-        uint256 safeBalance = lessLib.getStakedSafeBalance(msg.sender);
-        require(
+        require(tokensLeft >= reservedTokens, "Not enough tokens left");
+        require(msg.value > 0, "Not null invest, please");
+        uint256 safeBalance = lessLib.getStakedSafeBalance(sender);
+        /*require(
             msg.value <=
                 (tokensLeft * generalInfo.tokenPriceInWei) / tokenMagnitude,
             "Not enough tokens left"
-        );
+        );*/
         uint256 totalInvestmentInWei =
-            investments[msg.sender].amountEth + msg.value;
+            investments[sender].amountEth + msg.value;
         /*require(
             totalInvestmentInWei >= minInvestInWei ||
                 raisedAmount >= hardCap - 1 ether,
@@ -327,19 +363,20 @@ contract PresalePublic is ReentrancyGuard {
             "Stake LessTokens"
         );
 
-        if (investments[msg.sender].amountEth == 0) {
+        if (investments[sender].amountEth == 0) {
             intermediate.participants += 1;
         }
 
         intermediate.raisedAmount += msg.value;
-        investments[msg.sender].amountEth = totalInvestmentInWei;
-        investments[msg.sender].amountTokens += reservedTokens;
+        investments[sender].amountEth = totalInvestmentInWei;
+        investments[sender].amountTokens += reservedTokens;
         generalInfo.tokensForSaleLeft = tokensLeft - reservedTokens;
     }
 
     function withdrawInvestment(address payable to, uint256 amount)
         external
         votesPassed
+        inWhitelist
         nonReentrant
     {
         require(
@@ -373,7 +410,7 @@ contract PresalePublic is ReentrancyGuard {
         generalInfo.tokensForSaleLeft += reservedTokens;
     }
 
-    function claimTokens() external nonReentrant liquidityAdded {
+    function claimTokens() external nonReentrant liquidityAdded inWhitelist {
         require(
             block.timestamp >= generalInfo.closeTimePresale,
             "Wait presale close time"
@@ -384,7 +421,7 @@ contract PresalePublic is ReentrancyGuard {
         );
         require(
             !claimed[msg.sender],
-            "You've been already claimed your tokens"
+            "You've already claimed your tokens"
         );
         claimed[msg.sender] = true; // make sure this goes first before transfer to prevent reentrancy
         generalInfo.token.transfer(
@@ -437,7 +474,7 @@ contract PresalePublic is ReentrancyGuard {
             block.timestamp + 15 minutes
         );
 
-        require(lpAmount != 0, "lpAmount not null");
+        //require(lpAmount != 0, "lpAmount not null");
 
         IUniswapV2Factory02 uniswapFactory =
             IUniswapV2Factory02(uniswapRouter.factory());
@@ -464,7 +501,7 @@ contract PresalePublic is ReentrancyGuard {
         if (collectedBalance > 0) {
             uint256 fee = lessLib.calculateFee(collectedBalance);
             lessLib.getVaultAddress().transfer(fee);
-            generalInfo.creator.transfer(address(this).balance);
+            generalInfo.creator.transfer(address(this).balance - generalInfo.collectedFee);
         }
     }
 
@@ -475,11 +512,13 @@ contract PresalePublic is ReentrancyGuard {
         onlyPresaleCreator
         liquidityAdded
     {
+        require(lpAmount != 0, "LP Tokens has been already claimed");
         require(block.timestamp >= uniswapInfo.unlockTime, "Too early");
         require(
             IERC20(lpAddress).transfer(generalInfo.creator, lpAmount),
             "Couldn't get your tokens"
         );
+        lpAmount = 0;
     }
 
     function getUnsoldTokens()
@@ -496,7 +535,8 @@ contract PresalePublic is ReentrancyGuard {
         }
     }
 
-    function collectFee() external onlyPlatformOwner nonReentrant votesPassed{
+    function collectFee() external onlyPresaleCreator nonReentrant votesPassed presaleIsNotCancelled{
+        require(generalInfo.collectedFee != 0, "Fee has already withdrawn");
         payable(platformOwner).transfer(generalInfo.collectedFee);
         generalInfo.collectedFee = 0;
     }
@@ -560,12 +600,16 @@ contract PresalePublic is ReentrancyGuard {
         return voters[msg.sender];
     }
 
+    function getGenInfo() external view returns(uint256,uint256,uint256) {
+        return (generalInfo.tokensForSaleLeft, generalInfo.tokensForLiquidityLeft, generalInfo.collectedFee);
+    }
+
     function getTokenAmount(uint256 _weiAmount)
         internal
         view
         returns (uint256)
     {
-        uint256 amount = lessLib.getStakedSafeBalance(msg.sender);
+        /*uint256 amount = lessLib.getStakedSafeBalance(msg.sender);
         uint256 discount = 0;
         uint256 pricePerToken = generalInfo.tokenPriceInWei;
         if (amount < 15000) {
@@ -583,6 +627,8 @@ contract PresalePublic is ReentrancyGuard {
             return (_weiAmount * tokenMagnitude) / (pricePerToken - discount);
         }
 
-        return 0;
+        return 0;*/
+
+        return (_weiAmount * tokenMagnitude) / generalInfo.tokenPriceInWei;
     }
 }

@@ -7,7 +7,7 @@ import "./IStaking.sol";
 contract LessLibrary is Ownable {
     PresaleInfo[] private presaleAddresses; // track all presales created
 
-    uint256 private minInvestorBalance = 15000 * 1e18;
+    uint256 private minInvestorBalance = 1000 * 1e18;
     uint256 private votingTime = 3 days; //tthree days
     //uint256 private votingTime = 300;
     uint256 private minStakeTime = 1 days; //one day
@@ -71,6 +71,19 @@ contract LessLibrary is Ownable {
 
     function getUsdtFee() external view onlyFactory returns(uint256, address) {
         return (usdtFee, tether);
+    }
+
+    function setTetherAddress(address _newAddress) external onlyDev {
+        require(_newAddress != address(0), "wrong parameter");
+        tether = _newAddress;
+    }
+
+    function setMinStakeTime(uint256 _new) external onlyDev {
+        minStakeTime = _new;
+    }
+
+    function setMinUnstakeTime(uint256 _new) external onlyDev {
+        minUnstakeTime = _new;
     }
 
     function addPresaleAddress(address _presale, bytes32 _title, string memory _description, bool _type)

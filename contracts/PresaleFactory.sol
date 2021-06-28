@@ -53,6 +53,7 @@ contract PresaleFactory {
         uint256 tokenPriceInWei;
         uint256 hardCapInWei;
         uint256 softCapInWei;
+        uint256 openVotingTime;
         uint256 openTime;
         uint256 closeTime;
         /*bool liquidity;
@@ -109,7 +110,7 @@ contract PresaleFactory {
         );*/
         //timing check
         require(
-                block.timestamp + safeLibrary.getVotingTime() <= _info.openTime &&
+                block.timestamp + 86400 <= _info.openVotingTime && _info.openVotingTime + safeLibrary.getVotingTime() <= _info.openTime &&
                 _info.openTime < _info.closeTime &&
                 _info.closeTime < _cakeInfo.liquidityAllocationTime,
             "Wrong timing"
@@ -130,9 +131,9 @@ contract PresaleFactory {
         ERC20 _token = ERC20(_info.tokenAddress);
         PresalePublic presale =
             new PresalePublic(
-                //address(this),
+                address(this),
                 address(safeLibrary),
-                //safeLibrary.owner(),
+                safeLibrary.owner(),
                 safeLibrary.getDev()
             );
 
@@ -273,6 +274,7 @@ contract PresaleFactory {
                 _tokensForSaleLiquidityFee[1],
                 _info.softCapInWei,
                 _info.hardCapInWei,
+                _info.openVotingTime,
                 _info.openTime,
                 _info.closeTime,
                 _tokensForSaleLiquidityFee[2]
