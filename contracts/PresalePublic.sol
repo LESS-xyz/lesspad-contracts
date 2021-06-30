@@ -19,6 +19,7 @@ contract PresalePublic is ReentrancyGuard {
     IntermediateVariables public intermediate;
 
     bool private initiate;
+    bool private withdrawedFunds;
     address private lpAddress;
     uint256 private lpAmount;
     address private devAddress;
@@ -173,7 +174,7 @@ contract PresalePublic is ReentrancyGuard {
     }
 
     receive() external payable {
-        //invest();
+        invest();
     }
 
     function init(
@@ -376,7 +377,6 @@ contract PresalePublic is ReentrancyGuard {
     function withdrawInvestment(address payable to, uint256 amount)
         external
         votesPassed
-        inWhitelist
         nonReentrant
     {
         require(
@@ -410,7 +410,7 @@ contract PresalePublic is ReentrancyGuard {
         generalInfo.tokensForSaleLeft += reservedTokens;
     }
 
-    function claimTokens() external nonReentrant liquidityAdded inWhitelist {
+    function claimTokens() external nonReentrant liquidityAdded {
         require(
             block.timestamp >= generalInfo.closeTimePresale,
             "Wait presale close time"
@@ -497,12 +497,15 @@ contract PresalePublic is ReentrancyGuard {
         onlyPresaleCreator
         liquidityAdded
     {
+        require(!withdrawedFunds, "Function works only once");
         uint256 collectedBalance = address(this).balance;
         if (collectedBalance > 0) {
             uint256 fee = lessLib.calculateFee(collectedBalance);
             lessLib.getVaultAddress().transfer(fee);
             generalInfo.creator.transfer(address(this).balance - generalInfo.collectedFee);
         }
+        _withdrawUnsoldTokens();
+        withdrawedFunds = true;
     }
 
     function refundLpTokens()
@@ -521,7 +524,7 @@ contract PresalePublic is ReentrancyGuard {
         lpAmount = 0;
     }
 
-    function getUnsoldTokens()
+    /*function getUnsoldTokens()
         external
         presaleIsNotCancelled
         nonReentrant
@@ -533,11 +536,19 @@ contract PresalePublic is ReentrancyGuard {
         if (unsoldTokensAmount > 0) {
             generalInfo.token.transfer(generalInfo.creator, unsoldTokensAmount);
         }
-    }
+    }*/
 
-    function collectFee() external onlyPresaleCreator nonReentrant votesPassed presaleIsNotCancelled{
+    function collectFee() external nonReentrant {
         require(generalInfo.collectedFee != 0, "Fee has already withdrawn");
-        payable(platformOwner).transfer(generalInfo.collectedFee);
+        if (intermediate.yesVotes >= intermediate.noVotes &&
+                intermediate.yesVotes >= lessLib.getMinYesVotesThreshold() && block.timestamp >= generalInfo.closeTimeVoting && !intermediate.cancelled) {
+                    payable(platformOwner).transfer(generalInfo.collectedFee);
+                }
+        else {
+            payable(generalInfo.creator).transfer(generalInfo.collectedFee);
+            intermediate.cancelled = true;
+        }
+        //payable(platformOwner).transfer(generalInfo.collectedFee);
         generalInfo.collectedFee = 0;
     }
 
@@ -581,6 +592,7 @@ contract PresalePublic is ReentrancyGuard {
     }
 
     function cancelPresale() external presaleIsNotCancelled onlyOwners {
+        _withdrawUnsoldTokens();
         intermediate.cancelled = true;
     }
 
@@ -631,4 +643,13 @@ contract PresalePublic is ReentrancyGuard {
 
         return (_weiAmount * tokenMagnitude) / generalInfo.tokenPriceInWei;
     }
+
+    function _withdrawUnsoldTokens() internal {
+        uint256 unsoldTokensAmount =
+            generalInfo.tokensForSaleLeft + generalInfo.tokensForLiquidityLeft;
+        if (unsoldTokensAmount > 0) {
+            generalInfo.token.transfer(generalInfo.creator, unsoldTokensAmount);
+        }
+    }
 }
+
