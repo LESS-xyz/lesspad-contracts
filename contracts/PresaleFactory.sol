@@ -103,14 +103,15 @@ contract PresaleFactory {
         PresaleInfo calldata _info,
         PresalePancakeSwapInfo calldata _cakeInfo,
         PresaleStringInfo calldata _stringInfo
-    ) external payable {
+    ) external payable returns (uint256 presaleId) {
         /*require(
             _info.presaleType == 0,
             "Use other function for other presale type"
         );*/
         //timing check
         require(
-                block.timestamp + 86400 <= _info.openVotingTime && _info.openVotingTime + safeLibrary.getVotingTime() <= _info.openTime &&
+                _info.openTime > block.timestamp &&
+                _info.openVotingTime + safeLibrary.getVotingTime() + 86400 <= _info.openTime &&
                 _info.openTime < _info.closeTime &&
                 _info.closeTime < _cakeInfo.liquidityAllocationTime,
             "Wrong timing"
@@ -184,7 +185,7 @@ contract PresaleFactory {
             _stringInfo
         );
 
-        uint256 presaleId = safeLibrary.addPresaleAddress(address(presale), _stringInfo.saleTitle, _stringInfo.description, false);
+        presaleId = safeLibrary.addPresaleAddress(address(presale), _stringInfo.saleTitle, _stringInfo.description, false);
         presale.setPresaleId(presaleId);
         emit PublicPresaleCreated(
             presaleId,
@@ -279,12 +280,6 @@ contract PresaleFactory {
                 _info.closeTime,
                 _tokensForSaleLiquidityFee[2]
             ]
-            /*_cakeInfo.liquidityPercentageAllocation,
-            [_cakeInfo.listingPriceInWei,
-            _cakeInfo.lpTokensLockDurationInDays,
-            _cakeInfo.liquidityAllocationTime,
-            _info.openTime,
-            _info.closeTime]*/
         );
         _presale.setUniswapInfo(
             _cakeInfo.listingPriceInWei,
