@@ -32,6 +32,9 @@ contract PresaleFactory {
     Staking public safeStakingPool;
     //mapping(address => uint256) public lastClaimedTimestamp;
     address public owner;
+    //TODO: add whitelist as two address[] arrays, one for tier 1, one for tier 2
+    address[] private tierOneWhitelist;
+    address[] private tierTwoWhitelist;
 
     constructor(
         address _bscsInfoAddress,
@@ -259,6 +262,30 @@ contract PresaleFactory {
             emit CertifiedPresaleCreated(presaleId, msg.sender, _info.tokenAddress);
         }
     }*/
+
+    function getTierOneWhitelistLength() 
+        public
+        view
+    returns (uint256) {
+        return tierOneWhitelist.length();     
+    }
+
+    function getTierTwoWhitelistLength() 
+        public
+        view
+    returns (uint256) {
+        return tierTwoWhitelist.length();     
+    }
+
+    function isSigner(address _address)
+        public
+        veiw
+    returns (bool) {
+        //TODO: 
+        //add whitelist to this contract
+        //check if the address is in whitelist
+        return false;    
+    }
 
     function initializePresalePublic(
         PresalePublic _presale,

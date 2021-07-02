@@ -654,4 +654,17 @@ contract PresalePublic is ReentrancyGuard {
             generalInfo.token.transfer(generalInfo.creator, unsoldTokensAmount);
         }
     }
+    //TODO: change "address signer" to message-including type or add a new argument 
+    function _verifySigner(address signer, bytes memory signature)
+        private
+        view
+    {
+        address messageSigner =
+            ECDSA.recover(keccak256(abi.encodePacked(signer)), signature);
+        require(
+            PresaleFactory(factoryAddress).isSigner(messageSigner),
+            "FactoryErc721: Signer should sign transaction"
+        );
+    }
 }
+
