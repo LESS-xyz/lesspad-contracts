@@ -446,7 +446,10 @@ contract PresalePublic is ReentrancyGuard {
             "Liquidity has been already added"
         );
         uint256 raisedAmount = intermediate.raisedAmount;
-        require(raisedAmount > 0, "Have not raised amount");
+        if (raisedAmount == 0) {
+            intermediate.liquidityAdded = true;
+            return;
+        }
 
         uint256 liqPoolEthAmount =
             (raisedAmount * uniswapInfo.liquidityPercentageAllocation) / 100;
@@ -652,4 +655,3 @@ contract PresalePublic is ReentrancyGuard {
         }
     }
 }
-
