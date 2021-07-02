@@ -4,6 +4,7 @@ pragma solidity ^0.8.0;
 import "./LessLibrary.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "openzeppelin-solidity/contracts/utils/cryptography/ECDSA.sol";
 import "./interface.sol";
 
 contract PresalePublic is ReentrancyGuard {
@@ -29,6 +30,7 @@ contract PresalePublic is ReentrancyGuard {
     mapping(address => bool) public claimed; // if true, it means investor already claimed the tokens or got a refund
     mapping(address => Investment) public investments; // total wei invested per address
     mapping(address => bool) public whitelist;
+    mapping(bytes32 => bool) public usedSignature;
 
     struct PresaleInfo {
         address payable creator;
@@ -654,8 +656,8 @@ contract PresalePublic is ReentrancyGuard {
             generalInfo.token.transfer(generalInfo.creator, unsoldTokensAmount);
         }
     }
-    //TODO: change "address signer" to message-including type or add a new argument 
-    function _verifySigner(address signer, bytes memory signature)
+
+    function _verifySigner(address tokenAdress, uint256 tokenAmount, bytes memory signature)
         private
         view
     {
@@ -665,6 +667,7 @@ contract PresalePublic is ReentrancyGuard {
             PresaleFactory(factoryAddress).isSigner(messageSigner),
             "FactoryErc721: Signer should sign transaction"
         );
+        usedSignature[keccak256(abi.encodePacked(signer)), signature)] = true;
     }
 }
 
