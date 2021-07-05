@@ -4,13 +4,14 @@ pragma solidity ^0.8.0;
 import "./LessLibrary.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-import "openzeppelin-solidity/contracts/utils/cryptography/ECDSA.sol";
+import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "./interface.sol";
+import "./PresaleFactory.sol";
 
 contract PresalePublic is ReentrancyGuard {
     uint256 public id;
 
-    address public factoryAddress;
+    address payable public factoryAddress;
     address public platformOwner;
     LessLibrary public lessLib;
 
@@ -159,7 +160,7 @@ contract PresalePublic is ReentrancyGuard {
     }
 
     constructor(
-        address _factory,
+        address payable _factory,
         address _library,
         address _platformOwner,
         address _devAddress
@@ -475,7 +476,7 @@ contract PresalePublic is ReentrancyGuard {
             liqPoolTokenAmount,
             0,
             0,
-            address(this),
+            payable(address(this)),
             block.timestamp + 15 minutes
         );
 
@@ -503,11 +504,11 @@ contract PresalePublic is ReentrancyGuard {
         liquidityAdded
     {
         require(!withdrawedFunds, "Function works only once");
-        uint256 collectedBalance = address(this).balance;
+        uint256 collectedBalance = payable(address(this)).balance;
         if (collectedBalance > 0) {
             uint256 fee = lessLib.calculateFee(collectedBalance);
             lessLib.getVaultAddress().transfer(fee);
-            generalInfo.creator.transfer(address(this).balance - generalInfo.collectedFee);
+            generalInfo.creator.transfer(payable(address(this)).balance - generalInfo.collectedFee);
         }
         _withdrawUnsoldTokens();
         withdrawedFunds = true;
@@ -661,13 +662,14 @@ contract PresalePublic is ReentrancyGuard {
         private
         view
     {
+        PresaleFactory presaleFactory = PresaleFactory(factoryAddress);
         address messageSigner =
-            ECDSA.recover(keccak256(abi.encodePacked(signer)), signature);
+            ECDSA.recover(keccak256(abi.encodePacked(tokenAdress, tokenAmount)), signature);
         require(
-            PresaleFactory(factoryAddress).isSigner(messageSigner),
-            "FactoryErc721: Signer should sign transaction"
+            presaleFactory.isSigner(messageSigner),
+            "Signer is not authorised"
         );
-        usedSignature[keccak256(abi.encodePacked(signer)), signature)] = true;
+        // usedSignature[keccak256(messageSigner)] = true;
     }
 }
 

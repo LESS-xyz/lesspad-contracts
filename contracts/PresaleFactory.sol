@@ -32,6 +32,7 @@ contract PresaleFactory {
     Staking public safeStakingPool;
     //mapping(address => uint256) public lastClaimedTimestamp;
     address public owner;
+    mapping (address => bool) private signers; //mapping for adresses that can call sign functions 
     //TODO: add whitelist as two address[] arrays, one for tier 1, one for tier 2
     address[] private tierOneWhitelist;
     address[] private tierTwoWhitelist;
@@ -135,7 +136,7 @@ contract PresaleFactory {
         ERC20 _token = ERC20(_info.tokenAddress);
         PresalePublic presale =
             new PresalePublic(
-                address(this),
+                payable(address(this)),
                 address(safeLibrary),
                 safeLibrary.owner(),
                 safeLibrary.getDev()
@@ -267,24 +268,35 @@ contract PresaleFactory {
         public
         view
     returns (uint256) {
-        return tierOneWhitelist.length();     
+        return tierOneWhitelist.length;     
     }
 
     function getTierTwoWhitelistLength() 
         public
         view
     returns (uint256) {
-        return tierTwoWhitelist.length();     
+        return tierTwoWhitelist.length;     
     }
 
     function isSigner(address _address)
         public
-        veiw
+        view
     returns (bool) {
-        //TODO: 
-        //add whitelist to this contract
-        //check if the address is in whitelist
-        return false;    
+        return signers[_address];
+    }
+
+    function addSigner(address _address)
+        public
+        onlyDev
+    {
+        signers[_address] = true;
+    }
+
+    function removeSigner(address _address)
+        public
+        onlyDev
+    {
+        signers[_address] = false;
     }
 
     function initializePresalePublic(
