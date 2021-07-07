@@ -21,7 +21,7 @@ contract LessLibrary is Ownable {
     uint8 private feePercent = 2;
     uint32 private usdtFee = 1 * 1e6;
 
-    address private uniswapRouter = address(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D); // uniswapV2 Router
+    address private uniswapRouter; // uniswapV2 Router
     address private tether = address(0x110a13FC3efE6A245B50102D2d79B3E76125Ae83);
 
     address payable private lessVault;
@@ -52,11 +52,13 @@ contract LessLibrary is Ownable {
         _;
     }
 
-    constructor(address _dev, address payable _vault) {
+    constructor(address _dev, address payable _vault, address _uniswapRouter, address _tether) {
         require(_dev != address(0));
         require(_vault != address(0));
         devAddress = _dev;
         lessVault = _vault;
+        uniswapRouter = _uniswapRouter;
+        tether = _tether;
     }
 
     function setFactoryAddress(address _factory) external onlyDev {
