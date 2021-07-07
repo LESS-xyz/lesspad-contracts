@@ -2,21 +2,33 @@
 pragma solidity ^0.8.0;
 
 interface IUniswapV2Router02 {
+    function addLiquidity(
+        address tokenA,
+        address tokenB,
+        uint amountADesired,
+        uint amountBDesired,
+        uint amountAMin,
+        uint amountBMin,
+        address to,
+        uint deadline
+    ) external returns (
+        uint amountA, 
+        uint amountB, 
+        uint liquidity
+    );
+
     function addLiquidityETH(
         address token,
-        uint256 amountTokenDesired,
-        uint256 amountTokenMin,
-        uint256 amountETHMin,
+        uint amountTokenDesired,
+        uint amountTokenMin,
+        uint amountETHMin,
         address to,
-        uint256 deadline
-    )
-        external
-        payable
-        returns (
-            uint256 amountToken,
-            uint256 amountETH,
-            uint256 liquidity
-        );
+        uint deadline
+    ) external payable returns (
+        uint amountToken, 
+        uint amountETH, 
+        uint liquidity
+    );
 
     function getAmountsIn(uint amountOut, address[] memory path) external view returns (uint[] memory amounts);
 
@@ -29,4 +41,15 @@ interface IUniswapV2Factory02 {
         external
         view
         returns (address pair);
+}
+
+interface IWETH {
+    function deposit() external payable;
+    function transfer(address to, uint value) external returns (bool);
+    function withdraw(uint) external;
+    function approve(address guy, uint wad) external returns (bool);
+}
+
+interface IPresaleFactory {
+    function isSigner(address _address) external view returns (bool);
 }

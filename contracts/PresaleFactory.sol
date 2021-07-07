@@ -30,12 +30,10 @@ contract PresaleFactory {
     LessLibrary public immutable safeLibrary;
     ERC20 public token;
     Staking public safeStakingPool;
+    PresalePublic presalePublic;
     //mapping(address => uint256) public lastClaimedTimestamp;
     address public owner;
-    mapping (address => bool) private signers; //mapping for adresses that can call sign functions 
-    //TODO: add whitelist as two address[] arrays, one for tier 1, one for tier 2
-    address[] private tierOneWhitelist;
-    address[] private tierTwoWhitelist;
+    mapping (address => bool) private signers; //adresses that can call sign functions 
 
     constructor(
         address _bscsInfoAddress,
@@ -52,6 +50,7 @@ contract PresaleFactory {
         emit Received(msg.sender, msg.value);
     }
 
+
     struct PresaleInfo {
         address tokenAddress;
         uint256 tokenPriceInWei;
@@ -60,6 +59,9 @@ contract PresaleFactory {
         uint256 openVotingTime;
         uint256 openTime;
         uint256 closeTime;
+        uint256 _tokenAmount;
+        bytes _signature;
+        address WETHAddress;
         /*bool liquidity;
         bool automatically;
         bool whitelisted;
@@ -112,6 +114,9 @@ contract PresaleFactory {
             _info.presaleType == 0,
             "Use other function for other presale type"
         );*/
+        
+        require(presalePublic._verifySigner(abi.encodePacked(address(token), msg.sender, _info._tokenAmount), _info._signature),
+                "PresaleFactory: invalid signature");
         //timing check
         require(
                 _info.openTime > block.timestamp &&
@@ -139,7 +144,9 @@ contract PresaleFactory {
                 payable(address(this)),
                 address(safeLibrary),
                 safeLibrary.owner(),
-                safeLibrary.getDev()
+                safeLibrary.getDev(),
+                address(0),
+                _info.WETHAddress
             );
 
         address presaleAddress = address(presale);
@@ -263,20 +270,6 @@ contract PresaleFactory {
             emit CertifiedPresaleCreated(presaleId, msg.sender, _info.tokenAddress);
         }
     }*/
-
-    function getTierOneWhitelistLength() 
-        public
-        view
-    returns (uint256) {
-        return tierOneWhitelist.length;     
-    }
-
-    function getTierTwoWhitelistLength() 
-        public
-        view
-    returns (uint256) {
-        return tierTwoWhitelist.length;     
-    }
 
     function isSigner(address _address)
         public

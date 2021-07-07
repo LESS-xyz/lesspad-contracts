@@ -6,7 +6,6 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "./interface.sol";
-import "./PresaleFactory.sol";
 
 contract PresalePublic is ReentrancyGuard {
     uint256 public id;
@@ -26,12 +25,36 @@ contract PresalePublic is ReentrancyGuard {
     uint256 private lpAmount;
     address private devAddress;
     uint256 private tokenMagnitude;
+    address private tokenAddress;
+    address private WETHAddress;
+    address private bnbAddress = address(0);
+
+    //constants for unique signatures
+    uint256 private tier12Investconst = 120006;
+    uint256 private tier35Investconst = 3453014;
+    uint256 private tier12Registerconst = 126660;
+    uint256 private tier35Registerconst = 462104;
+    uint256 private lotteryConst = 135384;
+    uint256 private votingConst = 203833;
 
     mapping(address => uint256) public voters;
     mapping(address => bool) public claimed; // if true, it means investor already claimed the tokens or got a refund
     mapping(address => Investment) public investments; // total wei invested per address
-    mapping(address => bool) public whitelist;
+    
+    mapping(address => bool) public whitelist; //for tiers 3-5
+
+    mapping(address => bool) public whitelistTierOne;
+    mapping(address => bool) public whitelistTierTwo;
+    address[] public whitelistTierOneArr;
+    address[] public whitelistTierTwoArr;
     mapping(bytes32 => bool) public usedSignature;
+
+    TicketsInfo[] public tickets;
+
+    struct TicketsInfo {
+        address user;
+        uint256 ticketAmount;
+    }
 
     struct PresaleInfo {
         address payable creator;
@@ -155,7 +178,12 @@ contract PresalePublic is ReentrancyGuard {
     }
 
     modifier inWhitelist() {
-        require(whitelist[msg.sender] || lessLib.getStakedSafeBalance(msg.sender) < 20000 * tokenMagnitude, "You're not in whitelist");
+        require(whitelist[msg.sender], "You're not in whitelist");
+        _;
+    }
+
+    modifier inWhitelistTierOneTwo() {
+        require(whitelistTierOne[msg.sender] || whitelistTierTwo[msg.sender], "You're not in whitelist");
         _;
     }
 
@@ -163,7 +191,9 @@ contract PresalePublic is ReentrancyGuard {
         address payable _factory,
         address _library,
         address _platformOwner,
-        address _devAddress
+        address _devAddress,
+        address _tokenAddress,
+        address _WETHAddress
     )  {
         require(_factory != address(0));
         require(_library != address(0));
@@ -173,11 +203,9 @@ contract PresalePublic is ReentrancyGuard {
         factoryAddress = _factory;
         platformOwner = _platformOwner;
         devAddress = _devAddress;
+        tokenAddress = _tokenAddress;
+        WETHAddress = _WETHAddress;
         //generalInfo.closeTimeVoting = block.timestamp + lessLib.getVotingTime();
-    }
-
-    receive() external payable {
-        invest();
     }
 
     function init(
@@ -250,6 +278,7 @@ contract PresalePublic is ReentrancyGuard {
                 allocationTime > generalInfo.closeTimePresale,
             "Wrong arguments"
         );
+        require(duration >= 30, "Duration should be at least 30 days");
         uniswapInfo = PresaleUniswapInfo(
             price,
             duration,
@@ -281,13 +310,57 @@ contract PresalePublic is ReentrancyGuard {
         );
     }
 
-    function register() external openRegister {
-        require(lessLib.getStakedSafeBalance(msg.sender) >= 20000 * tokenMagnitude || !whitelist[msg.sender], "You're already in whitelist");
-        whitelist[msg.sender] = true;
+    function isWhitelisting() public view returns(bool) {
+        return block.timestamp <= generalInfo.openTimePresale;
     }
 
-    function vote(bool yes) external onlyWhenOpenVoting presaleIsNotCancelled notCreator{
-        uint256 safeBalance = lessLib.getStakedSafeBalance(msg.sender);
+    function getWhitelistTierOneLength() 
+        public
+        view
+    returns (uint256) {
+        return whitelistTierOneArr.length;     
+    }
+
+    function getWhitelistTierTwoLength() 
+        public
+        view
+    returns (uint256) {
+        return whitelistTierTwoArr.length;     
+    }
+
+    function registerTierOneTwo(uint256 _tokenAmount, bytes memory _signature) external openRegister {
+        require(!usedSignature[keccak256(_signature)]);
+        require(
+            _verifySigner(abi.encodePacked(_tokenAmount, msg.sender, address(this), tier12Registerconst), _signature),
+            "Register: invalid signature"
+        );
+        tickets.push(TicketsInfo(msg.sender, _tokenAmount/500));
+        if (_tokenAmount >= 1000 * tokenMagnitude &&  _tokenAmount < 5000 * tokenMagnitude) {
+            require(!whitelistTierOne[msg.sender], "You're already in whitelist");
+            whitelistTierOne[msg.sender] = true;
+            whitelistTierOneArr.push(msg.sender);
+        } else if (_tokenAmount >= 5000 * tokenMagnitude) {
+            require(!whitelistTierTwo[msg.sender], "You're already in whitelist");
+            whitelistTierTwo[msg.sender] = true;
+            whitelistTierTwoArr.push(msg.sender);
+        }
+        usedSignature[keccak256(_signature)] = true;
+    }
+
+    function register(uint256 _tokenAmount, bytes memory _signature) external openRegister {
+        require(!usedSignature[keccak256(_signature)]);
+        require(
+            _verifySigner(abi.encodePacked(_tokenAmount, msg.sender, address(this), tier35Registerconst), _signature),
+            "Register: invalid signature"
+        );
+        require(!whitelist[msg.sender], "You're already in whitelist");
+        whitelist[msg.sender] = true;
+        usedSignature[keccak256(_signature)] = true;
+    }
+
+    function vote(bool _yes, uint256 _stakingAmount, bytes memory _signature) external onlyWhenOpenVoting presaleIsNotCancelled notCreator{
+        require(_verifySigner(abi.encodePacked(_stakingAmount, msg.sender, address(this), votingConst), _signature));
+        uint256 safeBalance = _stakingAmount;
 
         require(
             safeBalance >= lessLib.getMinVoterBalance(),
@@ -296,14 +369,24 @@ contract PresalePublic is ReentrancyGuard {
         require(voters[msg.sender] == 0, "Vote already casted");
 
         voters[msg.sender] = safeBalance;
-        if (yes) {
+        if (_yes) {
             intermediate.yesVotes = intermediate.yesVotes + safeBalance;
         } else {
             intermediate.noVotes = intermediate.noVotes + safeBalance;
         }
     }
 
-    function invest()
+    
+    function _isLotteryWinner(uint256 _tokenAmount, bytes memory _signature) 
+    public 
+    view
+    returns(bool) 
+    {
+        return _verifySigner(abi.encodePacked(_tokenAmount, msg.sender, address(this), lotteryConst), _signature);
+    }
+
+    // _tokenAmount only for non bnb tokens
+    function invest(uint256 _tokenAmount, bytes memory _signature, uint256 _stakedAmount, bool _isTierOneTwo)
         public
         payable
         presaleIsNotCancelled
@@ -311,46 +394,60 @@ contract PresalePublic is ReentrancyGuard {
         votesPassed
         nonReentrant
         notCreator
-        inWhitelist
     {
+        require(!usedSignature[keccak256(_signature)]);
+        if (_isTierOneTwo) {
+            require(_verifySigner(abi.encodePacked(_stakedAmount, msg.sender, address(this), tier12Investconst), _signature), "Invest: Invalid signature");
+            require(_isLotteryWinner(_stakedAmount, _signature), "Invest: you aren't a lottery winner");
+        } else {
+            require(_verifySigner(abi.encodePacked(_stakedAmount, msg.sender, address(this), tier35Investconst), _signature), "Invest: Invalid signature");
+        }
+
+        uint256 amount;
+        if (tokenAddress == bnbAddress) {
+            amount = msg.value;
+        } else {
+            amount = _tokenAmount;
+        }
+
         address sender = msg.sender;
         uint256 tokensLeft;
         uint256 nowTime = block.timestamp;
         if(nowTime < generalInfo.openTimePresale + 3600){
-            require(lessLib.getStakedSafeBalance(sender) >= 200000*tokenMagnitude, "You have no invest permition");
+            require(_stakedAmount >= 200000*tokenMagnitude, "You have no invest permition");
             tokensLeft = intermediate.beginingAmount * 30 / 100;
         }
         else if(nowTime < generalInfo.openTimePresale + 5400){
-            require(lessLib.getStakedSafeBalance(sender) < 200000*tokenMagnitude && lessLib.getStakedSafeBalance(sender) >= 50000*tokenMagnitude, "You have no invest permition");
+            require(_stakedAmount < 200000*tokenMagnitude && _stakedAmount >= 50000*tokenMagnitude, "You have no invest permition");
             tokensLeft = (intermediate.beginingAmount - generalInfo.tokensForSaleLeft) + (intermediate.beginingAmount * 20 / 100);
         }
         else if(nowTime < generalInfo.openTimePresale + 6300){
-            require(lessLib.getStakedSafeBalance(sender) < 50000*tokenMagnitude && lessLib.getStakedSafeBalance(sender) >= 20000*tokenMagnitude, "You have no invest permition");
+            require(_stakedAmount < 50000*tokenMagnitude && _stakedAmount >= 20000*tokenMagnitude, "You have no invest permition");
             tokensLeft = (intermediate.beginingAmount - generalInfo.tokensForSaleLeft) + (intermediate.beginingAmount * 15 / 100);
         }
         else if(nowTime < generalInfo.openTimePresale + 6900){
-            require(lessLib.getStakedSafeBalance(sender) < 20000*tokenMagnitude && lessLib.getStakedSafeBalance(sender) >= 5000*tokenMagnitude, "You have no invest permition");
+            require(_stakedAmount < 20000*tokenMagnitude && _stakedAmount >= 5000*tokenMagnitude, "You have no invest permition");
             tokensLeft = (intermediate.beginingAmount - generalInfo.tokensForSaleLeft) + (intermediate.beginingAmount * 25 / 100);
         }
         else {
             tokensLeft = generalInfo.tokensForSaleLeft;
         }
-        uint256 reservedTokens = getTokenAmount(msg.value);
+        uint256 reservedTokens = getTokenAmount(amount);
         //tokensLeft = generalInfo.tokensForSaleLeft;
         require(
             intermediate.raisedAmount < generalInfo.hardCapInWei,
             "Hard cap reached"
         );
         require(tokensLeft >= reservedTokens, "Not enough tokens left");
-        require(msg.value > 0, "Not null invest, please");
-        uint256 safeBalance = lessLib.getStakedSafeBalance(sender);
+        require(amount > 0, "Not null invest, please");
+        uint256 safeBalance = _stakedAmount;
         /*require(
             msg.value <=
                 (tokensLeft * generalInfo.tokenPriceInWei) / tokenMagnitude,
             "Not enough tokens left"
         );*/
         uint256 totalInvestmentInWei =
-            investments[sender].amountEth + msg.value;
+            investments[sender].amountEth + amount;
         /*require(
             totalInvestmentInWei >= minInvestInWei ||
                 raisedAmount >= hardCap - 1 ether,
@@ -371,10 +468,12 @@ contract PresalePublic is ReentrancyGuard {
             intermediate.participants += 1;
         }
 
-        intermediate.raisedAmount += msg.value;
+        intermediate.raisedAmount += amount;
         investments[sender].amountEth = totalInvestmentInWei;
         investments[sender].amountTokens += reservedTokens;
         generalInfo.tokensForSaleLeft = tokensLeft - reservedTokens;
+
+        usedSignature[keccak256(_signature)] = true;
     }
 
     function withdrawInvestment(address payable to, uint256 amount)
@@ -471,9 +570,16 @@ contract PresalePublic is ReentrancyGuard {
 
         token.approve(address(uniswapRouter), liqPoolTokenAmount);
 
-        (, , lpAmount) = uniswapRouter.addLiquidityETH{value: liqPoolEthAmount}(
+        IWETH wETH = IWETH(WETHAddress);
+        wETH.deposit{value: liqPoolEthAmount}();
+
+        wETH.approve(WETHAddress, liqPoolEthAmount);
+
+        (, , lpAmount) = uniswapRouter.addLiquidity(
             address(token),
+            WETHAddress,
             liqPoolTokenAmount,
+            liqPoolEthAmount,
             0,
             0,
             payable(address(this)),
@@ -658,18 +764,19 @@ contract PresalePublic is ReentrancyGuard {
         }
     }
 
-    function _verifySigner(address tokenAdress, uint256 tokenAmount, bytes memory signature)
-        private
+    function _verifySigner(bytes memory data, bytes memory signature)
+        public
         view
+        returns (bool)
     {
-        PresaleFactory presaleFactory = PresaleFactory(factoryAddress);
+        IPresaleFactory presaleFactory = IPresaleFactory(factoryAddress);
         address messageSigner =
-            ECDSA.recover(keccak256(abi.encodePacked(tokenAdress, tokenAmount)), signature);
+            ECDSA.recover(keccak256(data), signature);
         require(
             presaleFactory.isSigner(messageSigner),
             "Signer is not authorised"
         );
-        // usedSignature[keccak256(messageSigner)] = true;
+        return true;
     }
 }
 
