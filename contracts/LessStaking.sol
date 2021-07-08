@@ -439,13 +439,13 @@ contract LessStaking is Ownable {
 	
 	uint256 public minDaysStake = 7;
 	uint16 public penaltyDistributed = 5; //100% = 1000
-	uint16 penaltyBurned = 5; //100% = 1000
-	uint256 lessPerLp = 300; //1 LP = 300 LESS
+	uint16 public penaltyBurned = 5; //100% = 1000
+	uint256 public lessPerLp = 300; //1 LP = 300 LESS
 
-	uint256 stakeIdLast;
+	uint256 public stakeIdLast;
 
-	uint256 allLp;
-	uint256 allLess;
+	uint256 public allLp;
+	uint256 public allLess;
 
 	 struct StakeItem
     {
@@ -606,7 +606,8 @@ contract LessStaking is Ownable {
 			burnPenalty(lpToBurn, lessToBurn);
 			distributePenalty(lpToDist, lessToDist);
 		}
-
+        allLp = allLp.sub(unstakedLp);
+        allLess = allLess.sub(unstakedLess);
 		deposit.stakedLp = deposit.stakedLp.sub(lpAmount);
 		deposit.stakedLess = deposit.stakedLess.sub(lessAmount);
 		deposit.lpEarned = deposit.lpEarned.sub(lpRewardsAmount);
@@ -627,6 +628,10 @@ contract LessStaking is Ownable {
 		if (isStakeEmpty) {
 			removeStake(staker, index);
 		}
+
+        if (stakeList[staker].length == 0) {
+            deleteStaker(staker);
+        }
 
 		emit Unstaked(Unstake(
 			staker,
@@ -672,9 +677,11 @@ contract LessStaking is Ownable {
 		require(lp > 0 || less > 0, "Error: zero penalty");
 		if(lp > 0) {
 			lpToken.transfer(address(0), lp);
+            allLp = allLp.sub(lp);
 		}
 		if(less > 0) {
 			lessToken.transfer(address(0), less);
+            allLess = allLess.sub(less);
 		}
 	}
 
@@ -755,7 +762,7 @@ contract LessStaking is Ownable {
 	/**
 	 * @dev return index of stake by id
 	 * @param staker staker address
-	 * @stakeId id of stake pool
+	 * @param stakeId of stake pool
 	 */
 
 	function _getStakeIndexById(address staker, uint256 stakeId) view internal returns(uint256){
@@ -770,7 +777,7 @@ contract LessStaking is Ownable {
 	/**
 	 * @dev support function for get balance of address
 	 * @param staker staker address
-	 * @stakeId id of stake pool
+     * @param balanceType type of balance
 	 */
 
 	function _getBalanceByAddress(address staker, BalanceType balanceType) view internal returns (uint256 balance){
@@ -787,12 +794,12 @@ contract LessStaking is Ownable {
 	/**
 	 * @dev remove stake from stakeList by index
 	 * @param staker staker address
-	 * @index index of stake pool
+	 * @param index of stake pool
 	 */
 
 	function removeStake(address staker, uint256 index) internal {
 		require(stakeList[staker].length != 0);
-		if (stakeList[staker].length > 1) {
+		if (stakeList[staker].length == 1) {
 			stakeList[staker].pop();
 		}
 		else {
@@ -800,4 +807,22 @@ contract LessStaking is Ownable {
 			stakeList[staker].pop();
 		}
 	}
+
+    function deleteStaker(address staker) internal {
+        require(stakers.length != 0);
+        if (stakers.length == 1) {
+            stakers.pop();
+        }
+        else {
+            uint256 index;
+            for (uint256 i = 0; i < stakers.length; i++) {
+                if (stakers[i] == staker) {
+                    index = i;
+                    break;
+                }
+            }
+            stakers[index] = stakers[stakers.length];
+            stakers.pop();
+        }
+    }
 }
