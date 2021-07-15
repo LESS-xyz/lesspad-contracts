@@ -3,12 +3,14 @@ pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "./IStaking.sol";
+import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import "./interface.sol";
 
 contract LessLibrary is Ownable {
     PresaleInfo[] private presaleAddresses; // track all presales created
 
     uint256 private minInvestorBalance = 1000 * 1e18;
-    uint256 private votingTime = 3 days; //tthree days
+    uint256 private votingTime = 3 days; //three days
     //uint256 private votingTime = 300;
     uint256 private minStakeTime = 1 days; //one day
     uint256 private minUnstakeTime = 6 days; //six days
@@ -67,7 +69,7 @@ contract LessLibrary is Ownable {
     }
 
     function setUsdtFee(uint32 _newAmount) external onlyDev {
-        require(_newAmount > 0, "Wrong parameter");
+        require(_newAmount > 0, "0 amt");
         usdtFee = _newAmount;
     }
 
@@ -76,7 +78,7 @@ contract LessLibrary is Ownable {
     }
 
     function setTetherAddress(address _newAddress) external onlyDev {
-        require(_newAddress != address(0), "wrong parameter");
+        require(_newAddress != address(0), "0 addr");
         tether = _newAddress;
     }
 
@@ -170,9 +172,7 @@ contract LessLibrary is Ownable {
     {
         uint256 balance;
         uint256 lastStakedTimestamp;
-        (balance, lastStakedTimestamp, ) = safeStakingPool.getAccountInfo(
-            address(sender)
-        );
+        (balance, lastStakedTimestamp, ) = safeStakingPool.getStakedInfo(sender);
 
         if (lastStakedTimestamp + minStakeTime <= block.timestamp) {
             return balance;
@@ -198,5 +198,20 @@ contract LessLibrary is Ownable {
 
     function getArrForSearch() external view returns(PresaleInfo[] memory) {
         return presaleAddresses;
+    }
+    
+    function _verifySigner(bytes memory data, bytes memory signature)
+        public
+        view
+        returns (bool)
+    {
+        IPresaleFactory presaleFactory = IPresaleFactory(payable(factoryAddress));
+        address messageSigner =
+            ECDSA.recover(keccak256(data), signature);
+        require(
+            presaleFactory.isSigner(messageSigner),
+            "Unauthorised signer"
+        );
+        return true;
     }
 }

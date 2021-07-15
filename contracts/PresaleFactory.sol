@@ -11,6 +11,7 @@ contract PresaleFactory {
     event PublicPresaleCreated(
         uint256 presaleId,
         address creator,
+        address presaleAddress,
         address tokenAddress,
         uint256 timeForLiquidity
     );
@@ -115,27 +116,27 @@ contract PresaleFactory {
             "Use other function for other presale type"
         );*/
         
-        require(presalePublic._verifySigner(abi.encodePacked(address(token), msg.sender, _info._tokenAmount), _info._signature),
-                "PresaleFactory: invalid signature");
+        // require(safeLibrary._verifySigner(abi.encodePacked(address(token), msg.sender, _info._tokenAmount), _info._signature),
+        //        "invalid signature");
         //timing check
         require(
                 _info.openTime > block.timestamp &&
                 _info.openVotingTime + safeLibrary.getVotingTime() + 86400 <= _info.openTime &&
                 _info.openTime < _info.closeTime &&
                 _info.closeTime < _cakeInfo.liquidityAllocationTime,
-            "Wrong timing"
+            "timing err"
         );
         require(
             _info.tokenPriceInWei > 0 &&
                 _info.softCapInWei > 0 &&
                 _info.hardCapInWei > 0 &&
                 _info.hardCapInWei >= _info.softCapInWei,
-            "Wrong parameters"
+            "Wrong params"
         );
-        uint256 stakedBalance = safeLibrary.getStakedSafeBalance(msg.sender);
+
         require(
-            stakedBalance >= safeLibrary.getMinCreatorStakedBalance(),
-            "Stake LESS"
+            safeLibrary.getStakedSafeBalance(msg.sender) >= safeLibrary.getMinCreatorStakedBalance(),
+            "stake"
         );
 
         ERC20 _token = ERC20(_info.tokenAddress);
@@ -149,48 +150,42 @@ contract PresaleFactory {
                 _info.WETHAddress
             );
 
-        address presaleAddress = address(presale);
-        address payable payableAddress = payable(address(presaleAddress));
 
-        //uint256 fee;
-        uint256 fee = 500000000000000000;
-        /*{
-            IUniswapV2Router02 uniswap =
-                IUniswapV2Router02(safeLibrary.getUniswapRouter());
-            (uint256 feeFromLib, address tether) = safeLibrary.getUsdtFee();
-            address[] memory path = new address[](2);
-            path[0] = uniswap.WETH();
-            path[1] = tether;
-            uint256[] memory usdtFee = uniswap.getAmountsIn(feeFromLib, path);
-            require(msg.value >= usdtFee[0], "Too low msg.value");
-            fee = usdtFee[0];
-        }*/
-        require(msg.value >= fee && fee > 0, "Not enough ETH");
+        (uint256 feeFromLib, address tether) = safeLibrary.getUsdtFee();
+        address[] memory path = new address[](2);
+        path[0] = IUniswapV2Router02(safeLibrary.getUniswapRouter()).WETH();
+        path[1] = tether;
 
-        uint256 maxLiqPoolTokenAmount =
+        uint256[] memory usdtFee = IUniswapV2Router02(safeLibrary.getUniswapRouter()).getAmountsIn(feeFromLib, path);
+        
+        require(msg.value >= usdtFee[0] && usdtFee[0] > 0, "value<=0"); 
+
+        // maxLiqPoolTokenAmount, maxTokensToBeSold, requiredTokenAmount
+        uint256[3] memory tokenAmounts; 
+        tokenAmounts[0] =
             ((_info.hardCapInWei *
                 _cakeInfo.liquidityPercentageAllocation *
                 (uint256(10)**uint256(token.decimals()))) /
                 (_cakeInfo.listingPriceInWei * 100));
 
-        uint256 maxTokensToBeSold =
+        tokenAmounts[1] =
             (((_info.hardCapInWei * 110) / 100) *
                 (uint256(10)**uint256(token.decimals()))) /
                 _info.tokenPriceInWei;
-        uint256 requiredTokenAmount = maxLiqPoolTokenAmount + maxTokensToBeSold;
+        tokenAmounts[2] = tokenAmounts[0] + tokenAmounts[1];
         require(
-            maxLiqPoolTokenAmount > 0 && maxTokensToBeSold > 0,
+            tokenAmounts[0] > 0 && tokenAmounts[1] > 0,
             "Wrong parameters"
         );
-        _token.transferFrom(msg.sender, address(presale), requiredTokenAmount);
-        payableAddress.transfer(fee);
+        _token.transferFrom(msg.sender, address(presale), tokenAmounts[2]);
+        payable(address(presale)).transfer(usdtFee[0]);
 
         //initialize
         initializePresalePublic(
             presale,
-            [maxTokensToBeSold,
-            maxLiqPoolTokenAmount,
-            fee],
+            [tokenAmounts[1],
+            tokenAmounts[0],
+            usdtFee[0]],
             _info,
             _cakeInfo,
             _stringInfo
@@ -201,6 +196,7 @@ contract PresaleFactory {
         emit PublicPresaleCreated(
             presaleId,
             msg.sender,
+            address(presale),
             _info.tokenAddress,
             _cakeInfo.liquidityAllocationTime
         );
@@ -278,18 +274,11 @@ contract PresaleFactory {
         return signers[_address];
     }
 
-    function addSigner(address _address)
+    function addOrRemoveSigner(address _address, bool _canSign)
         public
         onlyDev
     {
-        signers[_address] = true;
-    }
-
-    function removeSigner(address _address)
-        public
-        onlyDev
-    {
-        signers[_address] = false;
+        signers[_address] = _canSign;
     }
 
     function initializePresalePublic(

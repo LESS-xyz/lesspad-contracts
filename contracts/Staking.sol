@@ -21,7 +21,7 @@ contract Staking is ReentrancyGuard {
         uint256 lastStakedTimestamp;
         uint256 lastUnstakedTimestamp;
     }
-    mapping(address => AccountInfo) public accountInfos;
+    mapping(address => AccountInfo) private accountInfos;
     modifier onlyDev() {
         require(
             msg.sender == safeLibrary.getFactoryAddress() ||
@@ -38,8 +38,8 @@ contract Staking is ReentrancyGuard {
     }
 
     function stake(uint256 _amount) public nonReentrant {
-        require(_amount > 0, "Invalid amount");
-        require(safeToken.balanceOf(msg.sender) >= _amount, "Invalid balance");
+        require(_amount > 0, "not 0");
+        require(safeToken.balanceOf(msg.sender) >= _amount, "No balance");
 
         AccountInfo storage account = accountInfos[msg.sender];
         safeToken.transferFrom(msg.sender, address(this), _amount);
@@ -59,11 +59,11 @@ contract Staking is ReentrancyGuard {
 
         require(
             !address(msg.sender).isContract(),
-            "Please use your individual account"
+            "use your account"
         );
 
-        require(account.balance > 0, "Nothing to unstake");
-        require(_amount > 0, "Invalid amount");
+        require(account.balance > 0, "0 balance");
+        require(_amount > 0, "not 0");
         /*require(
             minUnstakeTime == 0 ||
                 (account.lastUnstakedTimestamp + minUnstakeTime <=
@@ -102,8 +102,9 @@ contract Staking is ReentrancyGuard {
         return totalStakedAmount;
     }
 
-    function getAccountInfo(address staker) external view returns (uint256, uint256, uint256) {
-        AccountInfo storage account = accountInfos[staker];
-        return (account.balance, account.lastStakedTimestamp, account.lastUnstakedTimestamp);
+    function getStakedInfo(address _sender) external view returns(uint256, uint256, uint256) {
+        return (accountInfos[_sender].balance, 
+                accountInfos[_sender].lastStakedTimestamp,
+                accountInfos[_sender].lastUnstakedTimestamp);
     }
 }
