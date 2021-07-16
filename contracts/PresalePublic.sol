@@ -38,8 +38,6 @@ contract PresalePublic is ReentrancyGuard {
     mapping(address => bool) private whitelistTierTwo;
  
     address[][5] public whitelist; //for backend
-    
-    mapping(bytes32 => uint256) public usedSignature;
 
     TicketsInfo[] public tickets;
 
@@ -328,7 +326,6 @@ contract PresalePublic is ReentrancyGuard {
             whitelistTierTwo[msg.sender] = true;
             whitelist[_tier].push(msg.sender);
         }
-        usedSignature[keccak256(_signature)] = 1;
     }
 
     function register(uint256 _tokenAmount, uint256 _tier, uint256 _timestamp, bytes memory _signature) external openRegister {
@@ -339,7 +336,6 @@ contract PresalePublic is ReentrancyGuard {
         require(!whitelistTierThreeFive[msg.sender], "al. whitelisted");
         whitelistTierThreeFive[msg.sender] = true;
         whitelist[_tier].push(msg.sender);
-        usedSignature[keccak256(_signature)] = 1;
     }
 
     function vote(bool _yes, uint256 _stakingAmount, uint256 _timestamp, bytes memory _signature) external onlyWhenOpenVoting presaleIsNotCancelled notCreator{
@@ -358,7 +354,6 @@ contract PresalePublic is ReentrancyGuard {
         } else {
             intermediate.noVotes = intermediate.noVotes + safeBalance;
         }
-        usedSignature[keccak256(_signature)] = 1;
     }
 
     // _tokenAmount only for non bnb tokens
@@ -367,8 +362,7 @@ contract PresalePublic is ReentrancyGuard {
     function invest(
         uint256 _tokenAmount, 
         bytes memory _signature, 
-        uint256 _stakedAmount, 
-        bool _isTierOneTwo, 
+        uint256 _stakedAmount,
         uint256 _timestamp,
         uint256[4] memory poolPercentages,
         uint256[4] memory stakingTiers
@@ -381,12 +375,8 @@ contract PresalePublic is ReentrancyGuard {
         nonReentrant
         notCreator
     {
-        require(usedSignature[keccak256(_signature)] == 0);
-        if (_isTierOneTwo) {
-            require(lessLib._verifySigner(abi.encodePacked(_stakedAmount, msg.sender, address(this), _timestamp), _signature));
-        } else {
-            require(lessLib._verifySigner(abi.encodePacked(_stakedAmount, msg.sender, address(this), _timestamp), _signature));
-        }
+        require(lessLib._verifySigner(abi.encodePacked(_stakedAmount, msg.sender, address(this), _timestamp), _signature));
+        
 
         uint256 amount = (tokenAddress == bnbAddress) ? msg.value : _tokenAmount;
 
@@ -450,8 +440,6 @@ contract PresalePublic is ReentrancyGuard {
         investments[msg.sender].amountEth = totalInvestmentInWei;
         investments[msg.sender].amountTokens += reservedTokens;
         generalInfo.tokensForSaleLeft = tokensLeft - reservedTokens;
-
-        usedSignature[keccak256(_signature)] = 1;
     }
 
     function withdrawInvestment(address payable to, uint256 amount)
