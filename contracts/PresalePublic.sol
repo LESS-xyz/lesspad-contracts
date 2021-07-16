@@ -177,6 +177,8 @@ contract PresalePublic is ReentrancyGuard {
         _;
     }
 
+    receive() external payable {}
+
     constructor(
         address payable _factory,
         address _library,
@@ -190,8 +192,8 @@ contract PresalePublic is ReentrancyGuard {
         factoryAddress = _factory;
         platformOwner = _platformOwner;
         devAddress = _devAddress;
-        tokenAddress = _tokenAddress;
-        WETHAddress = _WETHAddress;
+        tokenAddress = _tokenAddress; //todo remove
+        WETHAddress = _WETHAddress;  //todo get from lib
         //generalInfo.closeTimeVoting = block.timestamp + lessLib.getVotingTime();
     }
 
