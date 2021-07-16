@@ -62,6 +62,7 @@ contract PresaleFactory {
         uint256 closeTime;
         uint256 _tokenAmount;
         bytes _signature;
+        uint256 _timestamp;
         address WETHAddress;
         /*bool liquidity;
         bool automatically;
@@ -116,8 +117,8 @@ contract PresaleFactory {
             "Use other function for other presale type"
         );*/
         
-        // require(safeLibrary._verifySigner(abi.encodePacked(address(token), msg.sender, _info._tokenAmount), _info._signature),
-        //        "invalid signature");
+        require(safeLibrary._verifySigner(abi.encodePacked(address(token), msg.sender, _info._tokenAmount, _info._timestamp), _info._signature),
+                "invalid signature");
         //timing check
         require(
                 _info.openTime > block.timestamp &&
@@ -161,7 +162,7 @@ contract PresaleFactory {
         require(msg.value >= usdtFee[0] && usdtFee[0] > 0, "value<=0"); 
 
         // maxLiqPoolTokenAmount, maxTokensToBeSold, requiredTokenAmount
-        uint256[3] memory tokenAmounts; 
+        uint256[] memory tokenAmounts = new uint256[](3); 
         tokenAmounts[0] =
             ((_info.hardCapInWei *
                 _cakeInfo.liquidityPercentageAllocation *
