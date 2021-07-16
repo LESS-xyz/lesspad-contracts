@@ -28,7 +28,7 @@ contract PresaleFactory {
     );
     event Received(address indexed from, uint256 amount);
 
-    LessLibrary public immutable safeLibrary;
+    LessLibrary public safeLibrary;
     ERC20 public token;
     Staking public safeStakingPool;
     PresalePublic presalePublic;
@@ -217,7 +217,6 @@ contract PresaleFactory {
             stakedBalance >= safeLibrary.getMinCreatorStakedBalance(),
             "Stake LESS"
         );
-
         ERC20 _token = ERC20(_info.tokenAddress);
         PresaleCertified presale =
             new PresaleCertified(
@@ -226,7 +225,6 @@ contract PresaleFactory {
                 safeLibrary.owner(),
                 safeLibrary.getDev()
             );
-
         uint256 maxTokensToBeSold =
             (((_info.hardCapInWei * 110) / 100) *
                 (uint256(10)**uint256(token.decimals()))) /
@@ -249,7 +247,6 @@ contract PresaleFactory {
             require(requiredTokenAmount > 0, "Wrong parameters");
         }
         _token.transferFrom(msg.sender, address(presale), requiredTokenAmount);
-
         initializePresaleCertified(
             presale,
             maxTokensToBeSold,
@@ -258,7 +255,6 @@ contract PresaleFactory {
             _cakeInfo,
             _stringInfo
         );
-
         uint256 presaleId = safeLibrary.addPresaleAddress(address(presale));
         presale.setPresaleId(presaleId);
         if (_info.liquidity && _info.automatically) {
@@ -267,6 +263,12 @@ contract PresaleFactory {
             emit CertifiedPresaleCreated(presaleId, msg.sender, _info.tokenAddress);
         }
     }*/
+
+    function setLibStakingToken(address _lib, address _staking, address _token) onlyOwner public {
+        safeLibrary = LessLibrary(_lib);
+        safeStakingPool = Staking(_staking);
+        token = ERC20(_token);
+    }
 
     function isSigner(address _address)
         public
@@ -367,10 +369,8 @@ contract PresaleFactory {
                 block.timestamp,
             "Do not qualify"
         );
-
         uint256 totalHodlerBalance =
             safeLibrary.getStakedSafeBalance(msg.sender);
-
         require(
             totalHodlerBalance >= safeLibrary.getMinRewardQualifyBal() &&
                 totalHodlerBalance <= safeLibrary.getMaxRewardQualifyBal(),
