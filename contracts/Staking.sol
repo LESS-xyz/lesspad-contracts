@@ -6,14 +6,12 @@ import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "./LessLibrary.sol";
 import "./interface.sol";
 
-contract LessStaking is Ownable {
-    uint24 public constant SEC_IN_DAY = 86400;
-
+contract Staking is Ownable, ReentrancyGuard {
     IERC20 public lessToken;
     IUniswapV2Pair public lpToken;
     LessLibrary public safeLibrary;
  
-    uint256 public minDaysStake = 7;
+    uint256 public minDaysStake;
     uint16 public penaltyDistributed = 5; //100% = 1000
     uint16 public penaltyBurned = 5; //100% = 1000
     uint256 public lessPerLp = 300; //1 LP = 300 LESS
@@ -74,12 +72,23 @@ contract LessStaking is Ownable {
 
     mapping(address => StakeItem[]) public stakeList;
 
-    address[] stakers;
+    modifier onlyDev() {
+        require(
+            msg.sender == safeLibrary.getFactoryAddress() ||
+                msg.sender == safeLibrary.owner() ||
+                msg.sender == safeLibrary.getDev(),
+            "Only Dev"
+        );
+        _;
+    }
+
 
     constructor(IUniswapV2Pair _lp, IERC20 _less, address _safeLibrary) {
         lessToken = _less;
         lpToken = _lp;
         safeLibrary = LessLibrary(_safeLibrary);
+
+        minDaysStake = safeLibrary.getMinUnstakeTime();
     }
 
     //TODO добавить при стейкинге/анстейкинге обновление accountInfos 
@@ -95,7 +104,7 @@ contract LessStaking is Ownable {
      * @param lessAmount Amount of staked Less tokens
      */
 
-    function stake(uint256 lpAmount, uint256 lessAmount) external {
+    function stake(uint256 lpAmount, uint256 lessAmount) external nonReentrant  {
         require(lpAmount > 0 || lessAmount > 0, "Error: zero staked tokens");
         if (lpAmount > 0) {
             require(
@@ -109,11 +118,18 @@ contract LessStaking is Ownable {
                 "Error: Less token tranfer failed"
             );
         }
-        allLp = allLp.add(lpAmount);
-        allLess = allLess.add(lessAmount);
-        if (stakeList[_msgSender()].length == 0) {
-            stakers.push(_msgSender());
+        allLp += lpAmount;
+        allLess += lessAmount;
+        AccountInfo storage account = accountInfos[_msgSender()];
+
+        account.balance += lessAmount + getLpInLess(lpAmount);
+
+        if (account.lastUnstakedTimestamp == 0) {
+            account.lastUnstakedTimestamp = block.timestamp;
         }
+
+        account.lastStakedTimestamp = block.timestamp;
+
         stakeList[_msgSender()].push(
             StakeItem(stakeIdLast, block.timestamp, lpAmount, lessAmount, 0, 0)
         );
@@ -127,7 +143,7 @@ contract LessStaking is Ownable {
         );
     }
 
-    function setLibraryAddress(address _newInfo) external onlyOwner {
+    function setLibraryAddress(address _newInfo) external onlyDev {
         safeLibrary = LessLibrary(_newInfo);
     }
 
@@ -176,6 +192,18 @@ contract LessStaking is Ownable {
            uint256 lessRewardsAmount;
         }
 
+    struct PenaltyItem {
+        uint256 lpToBurn;
+        uint256 lessToBurn;
+        uint256 lpToDist;
+        uint256 lessToDist;
+    }
+    struct AmountItem {
+        uint256 lpAmount;
+        uint256 lessAmount;
+        uint256 lpRewardsAmount;
+        uint256 lessRewardsAmount;
+    }
 
     function _unstake(
         uint256 lpAmount,
@@ -184,58 +212,60 @@ contract LessStaking is Ownable {
         uint256 lessRewardsAmount,
         uint256 _stakeId,
         bool isWithoutPenalty
-    ) internal {
+    ) internal nonReentrant {
         address staker = _msgSender();
         require(stakeList[staker].length > 0, "Error: you haven't stakes");
 
+        AmountItem memory amountItem = AmountItem(lpAmount, lessAmount, lpRewardsAmount, lessRewardsAmount);
         
 
         uint256 index = _getStakeIndexById(staker, _stakeId);
         require(index != ~uint256(0), "Error: no such stake");
         StakeItem memory deposit = stakeList[staker][index];
 
-        uint256 stakeLessRewards = (deposit.stakedLess).mul(lessRewardsAmount).div(allLess);
-        uint256 stakeLpRewards = (deposit.stakedLp).mul(lpRewardsAmount).div(allLp);
+        uint256 stakeLessRewards = deposit.stakedLess * amountItem.lessRewardsAmount / allLess;
+        uint256 stakeLpRewards = deposit.stakedLp * amountItem.lpRewardsAmount / allLp;
 
-        require(lpAmount > 0 || lessAmount > 0, "Error: you unstake nothing");
+        require(amountItem.lpAmount > 0 || amountItem.lessAmount > 0, "Error: you unstake nothing");
         require(
-            lpAmount <= deposit.stakedLp,
+            amountItem.lpAmount <= deposit.stakedLp,
             "Error: insufficient LP token balance"
         );
         require(
-            lessAmount <= deposit.stakedLess,
+            amountItem.lessAmount <= deposit.stakedLess,
             "Error: insufficient Less token balance"
         );
         require(
-            lpRewardsAmount <= (stakeLpRewards - deposit.lpRewardsWithdrawn),
+            amountItem.lpRewardsAmount <= (stakeLpRewards - deposit.lpRewardsWithdrawn),
             "Error: insufficient LP token rewards"
         );
         require(
-            lessRewardsAmount <= (stakeLessRewards - deposit.lessRewardsWithdrawn),
+            amountItem.lessRewardsAmount <= (stakeLessRewards - deposit.lessRewardsWithdrawn),
             "Error: insufficient Less token rewards"
         );
 
         
-        UnstakeItem memory unstakeItem = UnstakeItem(lpAmount, lessAmount, lpRewardsAmount, lessRewardsAmount);
+        UnstakeItem memory unstakeItem = UnstakeItem(amountItem.lpAmount, amountItem.lessAmount, amountItem.lpRewardsAmount, amountItem.lessRewardsAmount);
 
         
 
-        bool isUnstakedEarlier = block.timestamp.sub(deposit.startTime) <
-            minDaysStake.mul(SEC_IN_DAY);
+        bool isUnstakedEarlier = block.timestamp - deposit.startTime <
+            minDaysStake;
         if (isUnstakedEarlier && !isWithoutPenalty) {
-            uint256 lpToBurn = unstakeItem.unstakedLp.mul(penaltyBurned).div(1000);
-            uint256 lessToBurn = unstakeItem.unstakedLess.mul(penaltyBurned).div(1000);
-            uint256 lpToDist = unstakeItem.unstakedLp.mul(penaltyDistributed).div(1000);
-            uint256 lessToDist = unstakeItem.unstakedLess.mul(penaltyDistributed).div(1000);
+            PenaltyItem memory penaltyItem = PenaltyItem(0,0,0,0);
+            penaltyItem.lpToBurn = unstakeItem.unstakedLp * penaltyBurned / 1000;
+            penaltyItem.lessToBurn = unstakeItem.unstakedLess * penaltyBurned / 1000;
+            penaltyItem.lpToDist = unstakeItem.unstakedLp * penaltyDistributed / 1000;
+            penaltyItem.lessToDist = unstakeItem.unstakedLess * penaltyDistributed / 1000;
 
-            unstakeItem.unstakedLp = unstakeItem.unstakedLp.sub(lpToBurn.add(lpToDist));
-            unstakeItem.unstakedLess = unstakeItem.unstakedLess.sub(lessToBurn.add(lessToDist));
+            unstakeItem.unstakedLp = unstakeItem.unstakedLp - penaltyItem.lpToBurn + penaltyItem.lpToDist;
+            unstakeItem.unstakedLess = unstakeItem.unstakedLess - penaltyItem.lessToBurn + penaltyItem.lessToDist;
 
-            burnPenalty(lpToBurn, lessToBurn);
-            distributePenalty(lpToDist, lessToDist);
+            burnPenalty(penaltyItem.lpToBurn, penaltyItem.lessToBurn);
+            distributePenalty(penaltyItem.lpToDist, penaltyItem.lessToDist);
         }
-        uint256 tranferedLp = unstakeItem.unstakedLp.add(unstakeItem.lpRewardsAmount);
-        uint256 tranferedLess = unstakeItem.unstakedLess.add(unstakeItem.lessRewardsAmount);
+        uint256 tranferedLp = unstakeItem.unstakedLp + unstakeItem.lpRewardsAmount;
+        uint256 tranferedLess = unstakeItem.unstakedLess + unstakeItem.lessRewardsAmount;
 
         require(
             lpToken.transfer(staker, tranferedLp),
@@ -246,15 +276,27 @@ contract LessStaking is Ownable {
             "Error: Less transfer failed"
         );
 
-        allLp = allLp.sub(unstakeItem.unstakedLp);
-        allLess = allLess.sub(unstakeItem.unstakedLess);
-        deposit.stakedLp = deposit.stakedLp.sub(lpAmount);
-        deposit.stakedLess = deposit.stakedLess.sub(lessAmount);
-        deposit.lpRewardsWithdrawn = deposit.lpRewardsWithdrawn.add(unstakeItem.lpRewardsAmount);
-        deposit.lessRewardsWithdrawn = deposit.lessRewardsWithdrawn.add(unstakeItem.lessRewardsAmount);
-        totalLessRewards = totalLessRewards.sub(unstakeItem.lessRewardsAmount);
-        totalLpRewards = totalLpRewards.sub(unstakeItem.lpRewardsAmount);
+        allLp -= unstakeItem.unstakedLp;
+        allLess -= unstakeItem.unstakedLess;
+        deposit.stakedLp -= amountItem.lpAmount;
+        deposit.stakedLess -= amountItem.lessAmount;
+        deposit.lpRewardsWithdrawn += unstakeItem.lpRewardsAmount;
+        deposit.lessRewardsWithdrawn += unstakeItem.lessRewardsAmount;
+        totalLessRewards -= unstakeItem.lessRewardsAmount;
+        totalLpRewards -= unstakeItem.lpRewardsAmount;
+
+        AccountInfo storage account = accountInfos[_msgSender()];
+
+        account.balance -= amountItem.lessAmount + getLpInLess(amountItem.lpAmount);
+
+        account.lastStakedTimestamp = block.timestamp;
         
+
+        if (account.balance == 0) {
+            account.lastUnstakedTimestamp = 0;
+            account.lastStakedTimestamp = 0;
+        }
+
         bool isStakeEmpty = deposit.stakedLp == 0 &&
             deposit.stakedLess == 0 &&
             deposit.lpRewardsWithdrawn == stakeLpRewards &&
@@ -262,10 +304,6 @@ contract LessStaking is Ownable {
 
         if (isStakeEmpty) {
             removeStake(staker, index);
-        }
-
-        if (stakeList[staker].length == 0) {
-            deleteStaker(staker);
         }
 
         emit Unstaked(
@@ -288,25 +326,16 @@ contract LessStaking is Ownable {
      * @param lp LP token penalty
      * @param less Less token penalty
      */
+     
 
     function distributePenalty(uint256 lp, uint256 less) internal {
         require(lp > 0 || less > 0, "Error: zero penalty");
-        // for (uint256 i = 0; i < stakers.length; i++) {
-        //     StakeItem[] memory stakes = stakeList[stakers[i]];
-        //     for (uint256 j = 0; j < stakes.length; j++) {
-        //         uint256 lpBalance = stakes[j].stakedLp;
-        //         uint256 lessBalance = stakes[j].stakedLess;
-        //         uint256 shareLp = lpBalance.mul(lp).div(allLp);
-        //         uint256 shareLess = lessBalance.mul(less).div(allLess);
 
-        //         stakes[j].lpEarned = stakes[j].lpEarned.add(shareLp);
-        //         stakes[j].lessEarned = stakes[j].lessEarned.add(shareLess);
-        //     }
-        // }
 
-        totalLessRewards = totalLessRewards.add(less);
-        totalLpRewards = totalLpRewards.add(lp);
+        totalLessRewards += less;
+        totalLpRewards += lp;
     }
+    
 
     /**
      * @dev burn penalty.
@@ -318,11 +347,11 @@ contract LessStaking is Ownable {
         require(lp > 0 || less > 0, "Error: zero penalty");
         if (lp > 0) {
             lpToken.transfer(address(0), lp);
-            allLp = allLp.sub(lp);
+            allLp -= lp;
         }
         if (less > 0) {
             lessToken.transfer(address(0), less);
-            allLess = allLess.sub(less);
+            allLess -= less;
         }
     }
 
@@ -368,7 +397,7 @@ contract LessStaking is Ownable {
      * @param _amount amount of converted LP
      */
     function getLpInLess(uint256 _amount) public view returns (uint256) {
-        return _amount.mul(lessPerLp);
+        return _amount * lessPerLp;
     }
 
     /**
@@ -389,7 +418,7 @@ contract LessStaking is Ownable {
      * @dev return full contract balance converted in Less
      */
     function getOverallBalanceInLess() public view returns (uint256) {
-        return allLess.add(allLp.mul(lessPerLp));
+        return allLess + allLp * lessPerLp;
     }
 
     /**
@@ -450,13 +479,11 @@ contract LessStaking is Ownable {
         if (deposits.length > 0) {
             for (uint256 i = 0; i < deposits.length; i++) {
                 if (balanceType == BalanceType.Lp)
-                    balance = balance.add(deposits[i].stakedLp);
+                    balance += deposits[i].stakedLp;
                 else if (balanceType == BalanceType.Less)
-                    balance = balance.add(deposits[i].stakedLess);
+                    balance += deposits[i].stakedLess;
                 else
-                    balance = balance.add(deposits[i].stakedLess).add(
-                        getLpInLess(deposits[i].stakedLp)
-                    );
+                    balance += deposits[i].stakedLess + getLpInLess(deposits[i].stakedLp);
             }
         }
     }
@@ -476,23 +503,6 @@ contract LessStaking is Ownable {
                 stakeList[staker].length
             ];
             stakeList[staker].pop();
-        }
-    }
-
-    function deleteStaker(address staker) internal {
-        require(stakers.length != 0);
-        if (stakers.length == 1) {
-            stakers.pop();
-        } else {
-            uint256 index;
-            for (uint256 i = 0; i < stakers.length; i++) {
-                if (stakers[i] == staker) {
-                    index = i;
-                    break;
-                }
-            }
-            stakers[index] = stakers[stakers.length];
-            stakers.pop();
         }
     }
 }

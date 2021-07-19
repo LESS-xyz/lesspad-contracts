@@ -2,7 +2,6 @@
 pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "./IStaking.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "./interface.sol";
 
@@ -13,7 +12,7 @@ contract LessLibrary is Ownable {
     uint256 private votingTime = 3 days; //three days
     //uint256 private votingTime = 300;
     uint256 private minStakeTime = 1 days; //one day
-    uint256 private minUnstakeTime = 6 days; //six days
+    uint256 private minUnstakeTime = 7 days; //six days
 
     address private factoryAddress;
 
