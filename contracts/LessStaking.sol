@@ -1,22 +1,17 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts/utils/math/SafeMath.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "./IUniswapV2Pair.sol";
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "./LessLibrary.sol";
+import "./interface.sol";
 
-/**
- *@dev Staking contract with penalty
- *
- */
 contract LessStaking is Ownable {
-    using SafeMath for uint256;
-
     uint24 public constant SEC_IN_DAY = 86400;
 
     IERC20 public lessToken;
     IUniswapV2Pair public lpToken;
+    LessLibrary public safeLibrary;
  
     uint256 public minDaysStake = 7;
     uint16 public penaltyDistributed = 5; //100% = 1000
@@ -29,6 +24,14 @@ contract LessStaking is Ownable {
     uint256 public allLess;
     uint256 public totalLpRewards;
     uint256 public totalLessRewards;
+    
+    mapping(address => AccountInfo) private accountInfos;
+    
+    struct AccountInfo {
+        uint256 balance;
+        uint256 lastStakedTimestamp;
+        uint256 lastUnstakedTimestamp;
+    }
 
     struct StakeItem {
         uint256 stakeId;
@@ -73,9 +76,17 @@ contract LessStaking is Ownable {
 
     address[] stakers;
 
-    constructor(IUniswapV2Pair _lp, IERC20 _less) {
+    constructor(IUniswapV2Pair _lp, IERC20 _less, address _safeLibrary) {
         lessToken = _less;
         lpToken = _lp;
+        safeLibrary = LessLibrary(_safeLibrary);
+    }
+
+    //TODO добавить при стейкинге/анстейкинге обновление accountInfos 
+    function getStakedInfo(address _sender) public view returns(uint256, uint256, uint256) {
+        return (accountInfos[_sender].balance, 
+                accountInfos[_sender].lastStakedTimestamp,
+                accountInfos[_sender].lastUnstakedTimestamp);
     }
 
     /**
@@ -116,6 +127,10 @@ contract LessStaking is Ownable {
         );
     }
 
+    function setLibraryAddress(address _newInfo) external onlyOwner {
+        safeLibrary = LessLibrary(_newInfo);
+    }
+
     /**
      * @dev unstake tokens without penalty. Only for owner
      * @param lpAmount Amount of unstaked LP tokens
@@ -154,7 +169,7 @@ contract LessStaking is Ownable {
         _unstake(lpAmount, lessAmount, lpRewards, lessRewards, _stakeId, false);
     }
 
-struct UnstakeItem {
+    struct UnstakeItem {
            uint256 unstakedLp;
            uint256 unstakedLess;
            uint256 lpRewardsAmount;
@@ -203,7 +218,7 @@ struct UnstakeItem {
         
         UnstakeItem memory unstakeItem = UnstakeItem(lpAmount, lessAmount, lpRewardsAmount, lessRewardsAmount);
 
-
+        
 
         bool isUnstakedEarlier = block.timestamp.sub(deposit.startTime) <
             minDaysStake.mul(SEC_IN_DAY);
