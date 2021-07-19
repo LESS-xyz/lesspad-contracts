@@ -43,6 +43,13 @@ interface IUniswapV2Factory02 {
         returns (address pair);
 }
 
+interface IUniswapV2Pair {
+    event Transfer(address indexed from, address indexed to, uint value);
+
+    function transfer(address to, uint value) external returns (bool);
+    function transferFrom(address from, address to, uint value) external returns (bool);
+}
+
 interface IWETH {
     function deposit() external payable;
     function transfer(address to, uint value) external returns (bool);
