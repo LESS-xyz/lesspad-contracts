@@ -29,25 +29,15 @@ contract PresalePublic is ReentrancyGuard {
     address private WETHAddress;
     address private bnbAddress = address(0);
 
-    //constants for unique signatures
-    uint256 private tier12Investconst = 120006;
-    uint256 private tier35Investconst = 3453014;
-    uint256 private tier12Registerconst = 126660;
-    uint256 private tier35Registerconst = 462104;
-    uint256 private lotteryConst = 135384;
-    uint256 private votingConst = 203833;
-
     mapping(address => uint256) public voters;
-    mapping(address => bool) public claimed; // if true, it means investor already claimed the tokens or got a refund
+    mapping(address => uint256) public claimed; // if 1, it means investor already claimed the tokens or got a refund
     mapping(address => Investment) public investments; // total wei invested per address
-    
-    mapping(address => bool) public whitelist; //for tiers 3-5
 
-    mapping(address => bool) public whitelistTierOne;
-    mapping(address => bool) public whitelistTierTwo;
-    address[] public whitelistTierOneArr;
-    address[] public whitelistTierTwoArr;
-    mapping(bytes32 => bool) public usedSignature;
+    mapping(address => bool) private whitelistTierThreeFive;
+    mapping(address => bool) private whitelistTierOne;
+    mapping(address => bool) private whitelistTierTwo;
+ 
+    address[][5] public whitelist; //for backend
 
     TicketsInfo[] public tickets;
 
@@ -129,13 +119,13 @@ contract PresalePublic is ReentrancyGuard {
     modifier onlyOwners() {
         require(
             msg.sender == generalInfo.creator || msg.sender == platformOwner,
-            "Only for owners"
+            "Only owner"
         );
         _;
     }
 
     modifier notCreator() {
-        require(msg.sender != generalInfo.creator, "Have no permition");
+        require(msg.sender != generalInfo.creator, "No permition");
         _;
     }
 
@@ -153,7 +143,7 @@ contract PresalePublic is ReentrancyGuard {
         uint256 nowTime = block.timestamp;
         require(
             nowTime >= generalInfo.openTimePresale &&
-                nowTime <= generalInfo.closeTimePresale, "Presale is not open yet or closed"
+                nowTime <= generalInfo.closeTimePresale, "No presales"
         );
         _;
     }
@@ -173,19 +163,21 @@ contract PresalePublic is ReentrancyGuard {
     }
 
     modifier openRegister() {
-        require(block.timestamp >= generalInfo.openTimePresale - 86400 && block.timestamp < generalInfo.openTimePresale, "Register is closed or not open yet");
+        require(block.timestamp >= generalInfo.openTimePresale - 86400 && block.timestamp < generalInfo.openTimePresale, "Not registration time");
         _;
     }
 
     modifier inWhitelist() {
-        require(whitelist[msg.sender], "You're not in whitelist");
+        require(whitelistTierThreeFive[msg.sender], "not in whitelist");
         _;
     }
 
     modifier inWhitelistTierOneTwo() {
-        require(whitelistTierOne[msg.sender] || whitelistTierTwo[msg.sender], "You're not in whitelist");
+        require(whitelistTierOne[msg.sender] || whitelistTierTwo[msg.sender], "not in whitelist");
         _;
     }
+
+    receive() external payable {}
 
     constructor(
         address payable _factory,
@@ -195,16 +187,13 @@ contract PresalePublic is ReentrancyGuard {
         address _tokenAddress,
         address _WETHAddress
     )  {
-        require(_factory != address(0));
-        require(_library != address(0));
-        require(_platformOwner != address(0));
-        require(_devAddress != address(0));
+        require(_factory != address(0) && _library != address(0) && _platformOwner != address(0) && _devAddress != address(0));
         lessLib = LessLibrary(_library);
         factoryAddress = _factory;
         platformOwner = _platformOwner;
         devAddress = _devAddress;
-        tokenAddress = _tokenAddress;
-        WETHAddress = _WETHAddress;
+        tokenAddress = _tokenAddress; //todo remove
+        WETHAddress = _WETHAddress;  //todo get from lib
         //generalInfo.closeTimeVoting = block.timestamp + lessLib.getVotingTime();
     }
 
@@ -214,35 +203,35 @@ contract PresalePublic is ReentrancyGuard {
     ) external onlyFabric {
         require(
             _creatorToken[0] != address(0) && _creatorToken[1] != address(0),
-            "Wrong addresses"
+            "0 addr"
         );
-        require(!initiate, "Function can work only once");
+        require(!initiate, "already inited");
         require(
             _priceTokensForSaleLiquiditySoftHardOpenOpenCloseFee[0] > 0,
-            "Price should be more then zero"
+            "0 price"
         );
         require(
             _priceTokensForSaleLiquiditySoftHardOpenOpenCloseFee[6] > 0 &&
                 _priceTokensForSaleLiquiditySoftHardOpenOpenCloseFee[7] > 0 &&
                 _priceTokensForSaleLiquiditySoftHardOpenOpenCloseFee[6] <
                 _priceTokensForSaleLiquiditySoftHardOpenOpenCloseFee[7],
-            "Wrong time presale interval"
+            "Wrong time"
         );
         require(
             _priceTokensForSaleLiquiditySoftHardOpenOpenCloseFee[3] > 0 &&
                 _priceTokensForSaleLiquiditySoftHardOpenOpenCloseFee[4] > 0,
-            "Wron soft or hard cup values"
+            "Wrong caps"
         );
-        require(_priceTokensForSaleLiquiditySoftHardOpenOpenCloseFee[5] >= block.timestamp + 86400, "Wrong open voting time");
+        require(_priceTokensForSaleLiquiditySoftHardOpenOpenCloseFee[5] >= block.timestamp + 86400, "not voting");
         uint256 closeVoting = _priceTokensForSaleLiquiditySoftHardOpenOpenCloseFee[5] + lessLib.getVotingTime();
         require(
             _priceTokensForSaleLiquiditySoftHardOpenOpenCloseFee[6] >= closeVoting,
-            "Voting and investment should not overlap"
+            "Voting&invest overlap"
         );
         require(
             _priceTokensForSaleLiquiditySoftHardOpenOpenCloseFee[1] != 0 &&
                 _priceTokensForSaleLiquiditySoftHardOpenOpenCloseFee[2] != 0,
-            "Not null tokens amount"
+            "0 tokens"
         );
         require(_priceTokensForSaleLiquiditySoftHardOpenOpenCloseFee[8]>0, "No fee");
         generalInfo = PresaleInfo(
@@ -274,11 +263,10 @@ contract PresalePublic is ReentrancyGuard {
     ) external onlyFabric {
         require(
             price != 0 &&
-                percent != 0 &&
-                allocationTime > generalInfo.closeTimePresale,
-            "Wrong arguments"
+            percent != 0 &&
+            allocationTime > generalInfo.closeTimePresale && 
+            duration >= 30
         );
-        require(duration >= 30, "Duration should be at least 30 days");
         uniswapInfo = PresaleUniswapInfo(
             price,
             duration,
@@ -310,63 +298,57 @@ contract PresalePublic is ReentrancyGuard {
         );
     }
 
+    function getWhitelist(uint256 _tier) public view returns(address[] memory) {
+        return whitelist[_tier];
+    }
+
     function isWhitelisting() public view returns(bool) {
         return block.timestamp <= generalInfo.openTimePresale;
     }
 
-    function getWhitelistTierOneLength() 
-        public
-        view
-    returns (uint256) {
-        return whitelistTierOneArr.length;     
-    }
+    // function getWhitelistLength(uint256 _tier) 
+    //     public
+    //     view
+    // returns (uint256) {
+    //     return whitelist[_tier].length;     
+    // }
 
-    function getWhitelistTierTwoLength() 
-        public
-        view
-    returns (uint256) {
-        return whitelistTierTwoArr.length;     
-    }
-
-    function registerTierOneTwo(uint256 _tokenAmount, bytes memory _signature) external openRegister {
-        require(!usedSignature[keccak256(_signature)]);
+    function registerTierOneTwo(uint256 _tokenAmount, uint256 _tier, uint256 _timestamp, bytes memory _signature) external openRegister {
         require(
-            _verifySigner(abi.encodePacked(_tokenAmount, msg.sender, address(this), tier12Registerconst), _signature),
-            "Register: invalid signature"
+            lessLib._verifySigner(abi.encodePacked(_tokenAmount, msg.sender, address(this), _timestamp), _signature),
+            "w sign"
         );
         tickets.push(TicketsInfo(msg.sender, _tokenAmount/500));
         if (_tokenAmount >= 1000 * tokenMagnitude &&  _tokenAmount < 5000 * tokenMagnitude) {
-            require(!whitelistTierOne[msg.sender], "You're already in whitelist");
+            require(!whitelistTierOne[msg.sender], "al. whitelisted");
             whitelistTierOne[msg.sender] = true;
-            whitelistTierOneArr.push(msg.sender);
+            whitelist[_tier].push(msg.sender);
         } else if (_tokenAmount >= 5000 * tokenMagnitude) {
-            require(!whitelistTierTwo[msg.sender], "You're already in whitelist");
+            require(!whitelistTierTwo[msg.sender], "al. whitelisted");
             whitelistTierTwo[msg.sender] = true;
-            whitelistTierTwoArr.push(msg.sender);
+            whitelist[_tier].push(msg.sender);
         }
-        usedSignature[keccak256(_signature)] = true;
     }
 
-    function register(uint256 _tokenAmount, bytes memory _signature) external openRegister {
-        require(!usedSignature[keccak256(_signature)]);
+    function register(uint256 _tokenAmount, uint256 _tier, uint256 _timestamp, bytes memory _signature) external openRegister {
         require(
-            _verifySigner(abi.encodePacked(_tokenAmount, msg.sender, address(this), tier35Registerconst), _signature),
-            "Register: invalid signature"
+           lessLib._verifySigner(abi.encodePacked(_tokenAmount, msg.sender, address(this), _timestamp), _signature),
+           "invalid signature"
         );
-        require(!whitelist[msg.sender], "You're already in whitelist");
-        whitelist[msg.sender] = true;
-        usedSignature[keccak256(_signature)] = true;
+        require(!whitelistTierThreeFive[msg.sender], "al. whitelisted");
+        whitelistTierThreeFive[msg.sender] = true;
+        whitelist[_tier].push(msg.sender);
     }
 
-    function vote(bool _yes, uint256 _stakingAmount, bytes memory _signature) external onlyWhenOpenVoting presaleIsNotCancelled notCreator{
-        require(_verifySigner(abi.encodePacked(_stakingAmount, msg.sender, address(this), votingConst), _signature));
+    function vote(bool _yes, uint256 _stakingAmount, uint256 _timestamp, bytes memory _signature) external onlyWhenOpenVoting presaleIsNotCancelled notCreator{
+        require(lessLib._verifySigner(abi.encodePacked(_stakingAmount, msg.sender, address(this), _timestamp), _signature));
         uint256 safeBalance = _stakingAmount;
 
         require(
             safeBalance >= lessLib.getMinVoterBalance(),
-            "Not enough Less to vote"
+            "scant bal"
         );
-        require(voters[msg.sender] == 0, "Vote already casted");
+        require(voters[msg.sender] == 0, "a.voted");
 
         voters[msg.sender] = safeBalance;
         if (_yes) {
@@ -376,17 +358,17 @@ contract PresalePublic is ReentrancyGuard {
         }
     }
 
-    
-    function _isLotteryWinner(uint256 _tokenAmount, bytes memory _signature) 
-    public 
-    view
-    returns(bool) 
-    {
-        return _verifySigner(abi.encodePacked(_tokenAmount, msg.sender, address(this), lotteryConst), _signature);
-    }
-
     // _tokenAmount only for non bnb tokens
-    function invest(uint256 _tokenAmount, bytes memory _signature, uint256 _stakedAmount, bool _isTierOneTwo)
+    // poolPercentages starts from 5th to 2nd teirs
+    // Staking tiers also starts from 5th to 2nd tiers
+    function invest(
+        uint256 _tokenAmount, 
+        bytes memory _signature, 
+        uint256 _stakedAmount,
+        uint256 _timestamp,
+        uint256[4] memory poolPercentages,
+        uint256[4] memory stakingTiers
+    )
         public
         payable
         presaleIsNotCancelled
@@ -395,39 +377,27 @@ contract PresalePublic is ReentrancyGuard {
         nonReentrant
         notCreator
     {
-        require(!usedSignature[keccak256(_signature)]);
-        if (_isTierOneTwo) {
-            require(_verifySigner(abi.encodePacked(_stakedAmount, msg.sender, address(this), tier12Investconst), _signature), "Invest: Invalid signature");
-            require(_isLotteryWinner(_stakedAmount, _signature), "Invest: you aren't a lottery winner");
-        } else {
-            require(_verifySigner(abi.encodePacked(_stakedAmount, msg.sender, address(this), tier35Investconst), _signature), "Invest: Invalid signature");
-        }
+        require(lessLib._verifySigner(abi.encodePacked(_stakedAmount, msg.sender, address(this), _timestamp), _signature));
+        
 
-        uint256 amount;
-        if (tokenAddress == bnbAddress) {
-            amount = msg.value;
-        } else {
-            amount = _tokenAmount;
-        }
+        uint256 amount = (tokenAddress == bnbAddress) ? msg.value : _tokenAmount;
 
-        address sender = msg.sender;
         uint256 tokensLeft;
-        uint256 nowTime = block.timestamp;
-        if(nowTime < generalInfo.openTimePresale + 3600){
-            require(_stakedAmount >= 200000*tokenMagnitude, "You have no invest permition");
-            tokensLeft = intermediate.beginingAmount * 30 / 100;
+        if(block.timestamp < generalInfo.openTimePresale + 3600){
+            require(_stakedAmount >= stakingTiers[0]*tokenMagnitude, "u cant vote");
+            tokensLeft = intermediate.beginingAmount * poolPercentages[0] / 100;
         }
-        else if(nowTime < generalInfo.openTimePresale + 5400){
-            require(_stakedAmount < 200000*tokenMagnitude && _stakedAmount >= 50000*tokenMagnitude, "You have no invest permition");
-            tokensLeft = (intermediate.beginingAmount - generalInfo.tokensForSaleLeft) + (intermediate.beginingAmount * 20 / 100);
+        else if(block.timestamp < generalInfo.openTimePresale + 5400){
+            require(_stakedAmount < stakingTiers[0]*tokenMagnitude && _stakedAmount >= stakingTiers[1]*tokenMagnitude, "u cant vote");
+            tokensLeft = (intermediate.beginingAmount - generalInfo.tokensForSaleLeft) + (intermediate.beginingAmount * poolPercentages[1] / 100);
         }
-        else if(nowTime < generalInfo.openTimePresale + 6300){
-            require(_stakedAmount < 50000*tokenMagnitude && _stakedAmount >= 20000*tokenMagnitude, "You have no invest permition");
-            tokensLeft = (intermediate.beginingAmount - generalInfo.tokensForSaleLeft) + (intermediate.beginingAmount * 15 / 100);
+        else if(block.timestamp < generalInfo.openTimePresale + 6300){
+            require(_stakedAmount < stakingTiers[1]*tokenMagnitude && _stakedAmount >= stakingTiers[2]*tokenMagnitude, "u cant vote");
+            tokensLeft = (intermediate.beginingAmount - generalInfo.tokensForSaleLeft) + (intermediate.beginingAmount * poolPercentages[2] / 100);
         }
-        else if(nowTime < generalInfo.openTimePresale + 6900){
-            require(_stakedAmount < 20000*tokenMagnitude && _stakedAmount >= 5000*tokenMagnitude, "You have no invest permition");
-            tokensLeft = (intermediate.beginingAmount - generalInfo.tokensForSaleLeft) + (intermediate.beginingAmount * 25 / 100);
+        else if(block.timestamp < generalInfo.openTimePresale + 6900){
+            require(_stakedAmount < stakingTiers[2]*tokenMagnitude && _stakedAmount >= stakingTiers[3]*tokenMagnitude, "u cant vote");
+            tokensLeft = (intermediate.beginingAmount - generalInfo.tokensForSaleLeft) + (intermediate.beginingAmount * poolPercentages[3] / 100);
         }
         else {
             tokensLeft = generalInfo.tokensForSaleLeft;
@@ -436,10 +406,10 @@ contract PresalePublic is ReentrancyGuard {
         //tokensLeft = generalInfo.tokensForSaleLeft;
         require(
             intermediate.raisedAmount < generalInfo.hardCapInWei,
-            "Hard cap reached"
+            "H cap"
         );
-        require(tokensLeft >= reservedTokens, "Not enough tokens left");
-        require(amount > 0, "Not null invest, please");
+        require(tokensLeft >= reservedTokens, "No tkns");
+        require(amount > 0, "<0");
         uint256 safeBalance = _stakedAmount;
         /*require(
             msg.value <=
@@ -447,7 +417,7 @@ contract PresalePublic is ReentrancyGuard {
             "Not enough tokens left"
         );*/
         uint256 totalInvestmentInWei =
-            investments[sender].amountEth + amount;
+            investments[msg.sender].amountEth + amount;
         /*require(
             totalInvestmentInWei >= minInvestInWei ||
                 raisedAmount >= hardCap - 1 ether,
@@ -464,16 +434,14 @@ contract PresalePublic is ReentrancyGuard {
             "Stake LessTokens"
         );
 
-        if (investments[sender].amountEth == 0) {
+        if (investments[msg.sender].amountEth == 0) {
             intermediate.participants += 1;
         }
 
         intermediate.raisedAmount += amount;
-        investments[sender].amountEth = totalInvestmentInWei;
-        investments[sender].amountTokens += reservedTokens;
+        investments[msg.sender].amountEth = totalInvestmentInWei;
+        investments[msg.sender].amountTokens += reservedTokens;
         generalInfo.tokensForSaleLeft = tokensLeft - reservedTokens;
-
-        usedSignature[keccak256(_signature)] = true;
     }
 
     function withdrawInvestment(address payable to, uint256 amount)
@@ -483,24 +451,24 @@ contract PresalePublic is ReentrancyGuard {
     {
         require(
             block.timestamp >= generalInfo.openTimePresale,
-            "Not yet opened"
+            "early"
         );
         require(
             investments[msg.sender].amountEth != 0,
-            "You are not an invesor"
+            "n investor"
         );
         require(
             investments[msg.sender].amountEth >= amount,
-            "You have not invest so much"
+            "w amount"
         );
-        require(amount > 0, "Enter not zero amount");
+        require(amount > 0, "0 amt");
         if (!intermediate.cancelled) {
             require(
                 intermediate.raisedAmount < generalInfo.softCapInWei,
-                "Couldn't withdraw investments after softCap collection"
+                "afterCap withdraw"
             );
         }
-        require(to != address(0), "Enter not a zero address");
+        require(to != address(0), "0 addr");
         if (investments[msg.sender].amountEth - amount == 0) {
             intermediate.participants -= 1;
         }
@@ -514,18 +482,11 @@ contract PresalePublic is ReentrancyGuard {
 
     function claimTokens() external nonReentrant liquidityAdded {
         require(
-            block.timestamp >= generalInfo.closeTimePresale,
-            "Wait presale close time"
+            block.timestamp >= generalInfo.closeTimePresale &&
+            claimed[msg.sender] == 0 && 
+            investments[msg.sender].amountEth != 0
         );
-        require(
-            investments[msg.sender].amountEth != 0,
-            "You are not an invesor"
-        );
-        require(
-            !claimed[msg.sender],
-            "You've already claimed your tokens"
-        );
-        claimed[msg.sender] = true; // make sure this goes first before transfer to prevent reentrancy
+        claimed[msg.sender] = 1; // make sure this goes first before transfer to prevent reentrancy
         generalInfo.token.transfer(
             msg.sender,
             investments[msg.sender].amountTokens
@@ -533,19 +494,19 @@ contract PresalePublic is ReentrancyGuard {
     }
 
     function addLiquidity() external presaleIsNotCancelled nonReentrant {
-        require(msg.sender == devAddress, "Function is only for backend");
+        require(msg.sender == devAddress, "only dev");
         require(
             uniswapInfo.liquidityAllocationTime <= block.timestamp,
-            "Too early to adding liquidity"
+            "early"
         );
 
         require(
             block.timestamp >= generalInfo.closeTimePresale,
-            "Wait for presale closing"
+            "n closed"
         );
         require(
             !intermediate.liquidityAdded,
-            "Liquidity has been already added"
+            "already added"
         );
         uint256 raisedAmount = intermediate.raisedAmount;
         if (raisedAmount == 0) {
@@ -560,7 +521,7 @@ contract PresalePublic is ReentrancyGuard {
 
         require(
             generalInfo.tokensForLiquidityLeft >= liqPoolTokenAmount,
-            "Error liquidity"
+            "no liquidity"
         );
 
         IUniswapV2Router02 uniswapRouter =
@@ -609,7 +570,7 @@ contract PresalePublic is ReentrancyGuard {
         onlyPresaleCreator
         liquidityAdded
     {
-        require(!withdrawedFunds, "Function works only once");
+        require(!withdrawedFunds, "only once");
         uint256 collectedBalance = payable(address(this)).balance;
         if (collectedBalance > 0) {
             uint256 fee = lessLib.calculateFee(collectedBalance);
@@ -627,11 +588,10 @@ contract PresalePublic is ReentrancyGuard {
         onlyPresaleCreator
         liquidityAdded
     {
-        require(lpAmount != 0, "LP Tokens has been already claimed");
-        require(block.timestamp >= uniswapInfo.unlockTime, "Too early");
+        require(lpAmount != 0 && block.timestamp >= uniswapInfo.unlockTime);
         require(
             IERC20(lpAddress).transfer(generalInfo.creator, lpAmount),
-            "Couldn't get your tokens"
+            "transf.fail"
         );
         lpAmount = 0;
     }
@@ -651,7 +611,7 @@ contract PresalePublic is ReentrancyGuard {
     }*/
 
     function collectFee() external nonReentrant {
-        require(generalInfo.collectedFee != 0, "Fee has already withdrawn");
+        require(generalInfo.collectedFee != 0, "already withdrawn");
         if (intermediate.yesVotes >= intermediate.noVotes &&
                 intermediate.yesVotes >= lessLib.getMinYesVotesThreshold() && block.timestamp >= generalInfo.closeTimeVoting && !intermediate.cancelled) {
                     payable(platformOwner).transfer(generalInfo.collectedFee);
@@ -671,12 +631,8 @@ contract PresalePublic is ReentrancyGuard {
     {
         uint256 openTimePresale = generalInfo.openTimePresale;
         require(
-            block.timestamp < openTimePresale,
-            "Presale has already beginning"
-        );
-        require(
-            _newCloseTime <= openTimePresale,
-            "Voting and investment should not overlap"
+            block.timestamp < openTimePresale && 
+            _newCloseTime <= openTimePresale
         );
         generalInfo.closeTimeVoting = _newCloseTime;
     }
@@ -688,16 +644,12 @@ contract PresalePublic is ReentrancyGuard {
     {
         require(
             block.timestamp < generalInfo.openTimePresale,
-            "Presale has already beginning"
+            "started"
         );
         require(
-            generalInfo.closeTimeVoting < _newOpenTime,
-            "Wrong new open presale time"
-        );
-        require(_newCloseTime > _newOpenTime, "Wrong new parameters");
-        require(
-            _newCloseTime < uniswapInfo.liquidityAllocationTime,
-            "Wrong new close presale time"
+            generalInfo.closeTimeVoting < _newOpenTime &&
+            _newCloseTime > _newOpenTime &&
+            _newCloseTime < uniswapInfo.liquidityAllocationTime
         );
         generalInfo.openTimePresale = _newOpenTime;
         generalInfo.closeTimePresale = _newCloseTime;
@@ -715,7 +667,7 @@ contract PresalePublic is ReentrancyGuard {
     function setPresaleId(uint256 _id) external onlyFabric {
         if(id != 0)
         {
-            require(id != _id, "Wrong parameter");
+            require(id != _id);
         }
         id = _id;
     }
@@ -762,21 +714,6 @@ contract PresalePublic is ReentrancyGuard {
         if (unsoldTokensAmount > 0) {
             generalInfo.token.transfer(generalInfo.creator, unsoldTokensAmount);
         }
-    }
-
-    function _verifySigner(bytes memory data, bytes memory signature)
-        public
-        view
-        returns (bool)
-    {
-        IPresaleFactory presaleFactory = IPresaleFactory(factoryAddress);
-        address messageSigner =
-            ECDSA.recover(keccak256(data), signature);
-        require(
-            presaleFactory.isSigner(messageSigner),
-            "Signer is not authorised"
-        );
-        return true;
     }
 }
 

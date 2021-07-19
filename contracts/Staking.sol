@@ -72,6 +72,7 @@ contract Staking is Ownable, ReentrancyGuard {
 
     mapping(address => StakeItem[]) public stakeList;
 
+    mapping(address => AccountInfo) private accountInfos;
     modifier onlyDev() {
         require(
             msg.sender == safeLibrary.getFactoryAddress() ||
@@ -236,18 +237,27 @@ contract Staking is Ownable, ReentrancyGuard {
             "Error: insufficient Less token balance"
         );
         require(
-            amountItem.lpRewardsAmount <= (stakeLpRewards - deposit.lpRewardsWithdrawn),
-            "Error: insufficient LP token rewards"
-        );
-        require(
-            amountItem.lessRewardsAmount <= (stakeLessRewards - deposit.lessRewardsWithdrawn),
-            "Error: insufficient Less token rewards"
+            !address(msg.sender).isContract(),
+            "use your account"
         );
 
-        
-        UnstakeItem memory unstakeItem = UnstakeItem(amountItem.lpAmount, amountItem.lessAmount, amountItem.lpRewardsAmount, amountItem.lessRewardsAmount);
-
-        
+        require(account.balance > 0, "0 balance");
+        require(_amount > 0, "not 0");
+        /*require(
+            minUnstakeTime == 0 ||
+                (account.lastUnstakedTimestamp + minUnstakeTime <=
+                    block.timestamp),
+            "Invalid Unstake Time"
+        );*/
+        if (account.balance < _amount) {
+            _amount = account.balance;
+        }
+        account.balance = account.balance - _amount;
+        totalStakedAmount -= _amount;
+        uint256 feeAmount = 0;
+        if(account.lastUnstakedTimestamp + minUnstakeTime <= block.timestamp) {
+            feeAmount = _amount / 100;
+            _amount = _amount - feeAmount;
 
         bool isUnstakedEarlier = block.timestamp - deposit.startTime <
             minDaysStake;
@@ -512,5 +522,10 @@ contract Staking is Ownable, ReentrancyGuard {
 
     function setLess(address _less) external onlyOwner {
         lessToken = IERC20(_less);
+
+    function getStakedInfo(address _sender) external view returns(uint256, uint256, uint256) {
+        return (accountInfos[_sender].balance, 
+                accountInfos[_sender].lastStakedTimestamp,
+                accountInfos[_sender].lastUnstakedTimestamp);
     }
 }
