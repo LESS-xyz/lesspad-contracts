@@ -1,5 +1,5 @@
-const Staking = artifacts.require("LessStaking");
+const Staking = artifacts.require("Staking");
 
 module.exports = function (deployer) {
-  deployer.deploy(Staking, "0xa372d1d35041714092900B233934fB2D002755E2", "0x46589Ab934277E44A5060f3273761b86396d5429");
+  deployer.deploy(Staking, "0x6d478b336d39707b57b4747d7cfca3386516b859", "0x66bf43b9fbd7780a5bdccae0adee692588ae4944", "0xA0BDCb13fD00D7cEF0eb872C4537fbf3F379E5Bb");
 };

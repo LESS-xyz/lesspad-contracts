@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "./LessLibrary.sol";
 import "./interface.sol";
@@ -504,5 +504,13 @@ contract Staking is Ownable, ReentrancyGuard {
             ];
             stakeList[staker].pop();
         }
+    }
+
+    function setLp(address _lp) external onlyOwner {
+        lpToken = IUniswapV2Pair(_lp);
+    }
+
+    function setLess(address _less) external onlyOwner {
+        lessToken = IERC20(_less);
     }
 }
