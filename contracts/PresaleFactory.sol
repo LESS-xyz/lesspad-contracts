@@ -36,6 +36,7 @@ contract PresaleFactory {
     address public owner;
     mapping (address => bool) private signers; //adresses that can call sign functions 
 
+
     constructor(
         address _bscsInfoAddress,
         address _bscsToken,
@@ -63,7 +64,6 @@ contract PresaleFactory {
         uint256 _tokenAmount;
         bytes _signature;
         uint256 _timestamp;
-        address WETHAddress;
         /*bool liquidity;
         bool automatically;
         bool whitelisted;
@@ -116,7 +116,7 @@ contract PresaleFactory {
             _info.presaleType == 0,
             "Use other function for other presale type"
         );*/
-        
+        require(!safeLibrary.usedSignature[_info._signature], "used signature");
         require(safeLibrary._verifySigner(abi.encodePacked(address(token), msg.sender, _info._tokenAmount, _info._timestamp), _info._signature),
                 "invalid signature");
         //timing check
@@ -148,7 +148,7 @@ contract PresaleFactory {
                 safeLibrary.owner(),
                 safeLibrary.getDev(),
                 address(0),
-                _info.WETHAddress
+                IUniswapV2Router02(safeLibrary.getUniswapRouter()).WETH()
             );
 
 
@@ -191,6 +191,8 @@ contract PresaleFactory {
             _cakeInfo,
             _stringInfo
         );
+
+        safeLibrary.usedSignature[_info._signature] = true;
 
         presaleId = safeLibrary.addPresaleAddress(address(presale), _stringInfo.saleTitle, _stringInfo.description, false);
         presale.setPresaleId(presaleId);
