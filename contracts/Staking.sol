@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Burnable.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "./LessLibrary.sol";
 import "./interface.sol";
 
 contract Staking is Ownable, ReentrancyGuard {
-    IERC20 public lessToken;
-    IUniswapV2Pair public lpToken;
+    ERC20Burnable public lessToken;
+    ERC20Burnable public lpToken;
     LessLibrary public safeLibrary;
  
     uint256 public minDaysStake;
@@ -83,7 +83,7 @@ contract Staking is Ownable, ReentrancyGuard {
     }
 
 
-    constructor(IUniswapV2Pair _lp, IERC20 _less, address _safeLibrary) {
+    constructor(ERC20Burnable _lp, ERC20Burnable _less, address _safeLibrary) {
         lessToken = _less;
         lpToken = _lp;
         safeLibrary = LessLibrary(_safeLibrary);
@@ -91,7 +91,6 @@ contract Staking is Ownable, ReentrancyGuard {
         minDaysStake = safeLibrary.getMinUnstakeTime();
     }
 
-    //TODO добавить при стейкинге/анстейкинге обновление accountInfos 
     function getStakedInfo(address _sender) public view returns(uint256, uint256, uint256) {
         return (accountInfos[_sender].balance, 
                 accountInfos[_sender].lastStakedTimestamp,
@@ -221,7 +220,7 @@ contract Staking is Ownable, ReentrancyGuard {
 
         uint256 index = _getStakeIndexById(staker, _stakeId);
         require(index != ~uint256(0), "Error: no such stake");
-        StakeItem memory deposit = stakeList[staker][index];
+        StakeItem storage deposit = stakeList[staker][index];
 
         uint256 stakeLessRewards = deposit.stakedLess * amountItem.lessRewardsAmount / allLess;
         uint256 stakeLpRewards = deposit.stakedLp * amountItem.lpRewardsAmount / allLp;
@@ -258,8 +257,8 @@ contract Staking is Ownable, ReentrancyGuard {
             penaltyItem.lpToDist = unstakeItem.unstakedLp * penaltyDistributed / 1000;
             penaltyItem.lessToDist = unstakeItem.unstakedLess * penaltyDistributed / 1000;
 
-            unstakeItem.unstakedLp = unstakeItem.unstakedLp - penaltyItem.lpToBurn + penaltyItem.lpToDist;
-            unstakeItem.unstakedLess = unstakeItem.unstakedLess - penaltyItem.lessToBurn + penaltyItem.lessToDist;
+            unstakeItem.unstakedLp -= penaltyItem.lpToBurn + penaltyItem.lpToDist;
+            unstakeItem.unstakedLess -= penaltyItem.lessToBurn + penaltyItem.lessToDist;
 
             burnPenalty(penaltyItem.lpToBurn, penaltyItem.lessToBurn);
             distributePenalty(penaltyItem.lpToDist, penaltyItem.lessToDist);
@@ -329,9 +328,6 @@ contract Staking is Ownable, ReentrancyGuard {
      
 
     function distributePenalty(uint256 lp, uint256 less) internal {
-        require(lp > 0 || less > 0, "Error: zero penalty");
-
-
         totalLessRewards += less;
         totalLpRewards += lp;
     }
@@ -344,13 +340,12 @@ contract Staking is Ownable, ReentrancyGuard {
      */
 
     function burnPenalty(uint256 lp, uint256 less) internal {
-        require(lp > 0 || less > 0, "Error: zero penalty");
         if (lp > 0) {
-            lpToken.transfer(address(0), lp);
+            lpToken.burn(lp);
             allLp -= lp;
         }
         if (less > 0) {
-            lessToken.transfer(address(0), less);
+            lessToken.burn(less);
             allLess -= less;
         }
     }
@@ -507,10 +502,10 @@ contract Staking is Ownable, ReentrancyGuard {
     }
 
     function setLp(address _lp) external onlyOwner {
-        lpToken = IUniswapV2Pair(_lp);
+        lpToken = ERC20Burnable(_lp);
     }
 
     function setLess(address _less) external onlyOwner {
-        lessToken = IERC20(_less);
+        lessToken = ERC20Burnable(_less);
     }
 }
