@@ -92,7 +92,6 @@ contract Staking is Ownable, ReentrancyGuard {
         minDaysStake = safeLibrary.getMinUnstakeTime();
     }
 
-    //TODO добавить при стейкинге/анстейкинге обновление accountInfos 
     function getStakedInfo(address _sender) public view returns(uint256, uint256, uint256) {
         return (accountInfos[_sender].balance, 
                 accountInfos[_sender].lastStakedTimestamp,
