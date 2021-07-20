@@ -12,7 +12,7 @@ contract LessLibrary is Ownable {
     uint256 private votingTime = 3 days; //three days
     //uint256 private votingTime = 300;
     uint256 private minStakeTime = 1 days; //one day
-    uint256 private minUnstakeTime = 7 days; //six days
+    uint256 private minUnstakeTime = 6 days; //six days
 
     address private factoryAddress;
 
@@ -23,13 +23,14 @@ contract LessLibrary is Ownable {
     uint32 private usdtFee = 1 * 1e6;
 
     address private uniswapRouter; // uniswapV2 Router
-    address private tether = address(0x110a13FC3efE6A245B50102D2d79B3E76125Ae83);
+    address private tether;
 
     address payable private lessVault;
     address private devAddress;
     IStaking public safeStakingPool;
 
     mapping(address => bool) private isPresale;
+    mapping(bytes => bool) public usedSignature;
 
     struct PresaleInfo {
         bytes32 title;
