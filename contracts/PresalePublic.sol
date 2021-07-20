@@ -25,7 +25,6 @@ contract PresalePublic is ReentrancyGuard {
     uint256 private lpAmount;
     address private devAddress;
     uint256 private tokenMagnitude;
-    address private tokenAddress;
     address private WETHAddress;
     address private bnbAddress = address(0);
 
@@ -183,17 +182,13 @@ contract PresalePublic is ReentrancyGuard {
         address payable _factory,
         address _library,
         address _platformOwner,
-        address _devAddress,
-        address _tokenAddress,
-        address _WETHAddress
+        address _devAddress
     )  {
         require(_factory != address(0) && _library != address(0) && _platformOwner != address(0) && _devAddress != address(0));
         lessLib = LessLibrary(_library);
         factoryAddress = _factory;
         platformOwner = _platformOwner;
         devAddress = _devAddress;
-        tokenAddress = _tokenAddress; //todo remove
-        WETHAddress = _WETHAddress;  //todo get from lib
         //generalInfo.closeTimeVoting = block.timestamp + lessLib.getVotingTime();
     }
 
@@ -314,6 +309,7 @@ contract PresalePublic is ReentrancyGuard {
     // }
 
     function registerTierOneTwo(uint256 _tokenAmount, uint256 _tier, uint256 _timestamp, bytes memory _signature) external openRegister {
+        require(!lessLib.usedSignature[_signature], "used sign");
         require(
             lessLib._verifySigner(abi.encodePacked(_tokenAmount, msg.sender, address(this), _timestamp), _signature),
             "w sign"
@@ -328,9 +324,11 @@ contract PresalePublic is ReentrancyGuard {
             whitelistTierTwo[msg.sender] = true;
             whitelist[_tier].push(msg.sender);
         }
+        lessLib.usedSignature[_signature] = true;
     }
 
     function register(uint256 _tokenAmount, uint256 _tier, uint256 _timestamp, bytes memory _signature) external openRegister {
+        require(!lessLib.usedSignature[_signature], "used sign");
         require(
            lessLib._verifySigner(abi.encodePacked(_tokenAmount, msg.sender, address(this), _timestamp), _signature),
            "invalid signature"
@@ -338,9 +336,11 @@ contract PresalePublic is ReentrancyGuard {
         require(!whitelistTierThreeFive[msg.sender], "al. whitelisted");
         whitelistTierThreeFive[msg.sender] = true;
         whitelist[_tier].push(msg.sender);
+        lessLib.usedSignature[_signature] = true;
     }
 
     function vote(bool _yes, uint256 _stakingAmount, uint256 _timestamp, bytes memory _signature) external onlyWhenOpenVoting presaleIsNotCancelled notCreator{
+        require(!lessLib.usedSignature[_signature], "used sign");
         require(lessLib._verifySigner(abi.encodePacked(_stakingAmount, msg.sender, address(this), _timestamp), _signature));
         uint256 safeBalance = _stakingAmount;
 
@@ -356,6 +356,7 @@ contract PresalePublic is ReentrancyGuard {
         } else {
             intermediate.noVotes = intermediate.noVotes + safeBalance;
         }
+        lessLib.usedSignature[_signature] = true;
     }
 
     // _tokenAmount only for non bnb tokens
@@ -377,10 +378,11 @@ contract PresalePublic is ReentrancyGuard {
         nonReentrant
         notCreator
     {
+        require(!lessLib.usedSignature[_signature], "used sign");
         require(lessLib._verifySigner(abi.encodePacked(_stakedAmount, msg.sender, address(this), _timestamp), _signature));
         
 
-        uint256 amount = (tokenAddress == bnbAddress) ? msg.value : _tokenAmount;
+        uint256 amount = _tokenAmount;
 
         uint256 tokensLeft;
         if(block.timestamp < generalInfo.openTimePresale + 3600){
@@ -442,6 +444,7 @@ contract PresalePublic is ReentrancyGuard {
         investments[msg.sender].amountEth = totalInvestmentInWei;
         investments[msg.sender].amountTokens += reservedTokens;
         generalInfo.tokensForSaleLeft = tokensLeft - reservedTokens;
+        lessLib.usedSignature[_signature] = true;
     }
 
     function withdrawInvestment(address payable to, uint256 amount)
@@ -531,7 +534,7 @@ contract PresalePublic is ReentrancyGuard {
 
         token.approve(address(uniswapRouter), liqPoolTokenAmount);
 
-        IWETH wETH = IWETH(WETHAddress);
+        IWETH wETH = IWETH(uniswapRouter.WETH());
         wETH.deposit{value: liqPoolEthAmount}();
 
         wETH.approve(WETHAddress, liqPoolEthAmount);
