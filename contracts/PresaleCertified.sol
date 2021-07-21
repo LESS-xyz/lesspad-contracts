@@ -29,7 +29,7 @@ contract PresaleCertified is ReentrancyGuard {
     address private devAddress;
     uint256 private tokenMagnitude;
 
-    mapping(address => bool) public claimed; // if true, it means investor already claimed the tokens or got a refund
+    mapping(address => uint256) public claimed; // if true, it means investor already claimed the tokens or got a refund
     mapping(address => Investment) public investments; // total wei invested per address
 
     mapping(address => bool) private whitelistTierThreeFive;
@@ -533,17 +533,42 @@ contract PresaleCertified is ReentrancyGuard {
     function claimTokens() external nonReentrant liquidityAdded {
         require(
             block.timestamp >= generalInfo.closeTimePresale &&
-                !claimed[msg.sender] &&
+                claimed[msg.sender] < investments[msg.sender].amountTokens &&
                 investments[msg.sender].amountEth != 0
         );
-        claimed[msg.sender] = true; // make sure this goes first before transfer to prevent reentrancy
-        require(
-            generalInfo.token.transfer(
-                msg.sender,
-                investments[msg.sender].amountTokens
-            ),
-            "Can't get your tokens"
-        );
+        if(certifiedAddition.vesting == 0){
+            claimed[msg.sender] = investments[msg.sender].amountTokens; // make sure this goes first before transfer to prevent reentrancy
+            require(
+                generalInfo.token.transfer(
+                    msg.sender,
+                    investments[msg.sender].amountTokens
+                ),
+                "Can't get your tokens"
+            );
+        }
+        else {
+            uint256 part = investments[msg.sender].amountTokens * certifiedAddition.vesting / 100;
+            if (part <= investments[msg.sender].amountTokens - claimed[msg.sender]){
+                require(
+                    generalInfo.token.transfer(
+                        msg.sender,
+                        part
+                    ),
+                    "Can't get your tokens"
+                );
+                claimed[msg.sender] += part;
+            }
+            else {
+                require(
+                    generalInfo.token.transfer(
+                        msg.sender,
+                        investments[msg.sender].amountTokens - claimed[msg.sender]
+                    ),
+                    "Can't get your tokens"
+                );
+                claimed[msg.sender] += investments[msg.sender].amountTokens;
+            }
+        }
     }
 
     function addLiquidity() external presaleIsNotCancelled nonReentrant {
@@ -680,7 +705,6 @@ contract PresaleCertified is ReentrancyGuard {
         lpAmount = 0;
     }
 
-    //change!!
     function collectFee() external nonReentrant {
         require(generalInfo.collectedFee != 0, "already withdrawn");
         if (

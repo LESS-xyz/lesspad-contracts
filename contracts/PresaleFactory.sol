@@ -139,6 +139,9 @@ contract PresaleFactory {
                 _info.hardCapInWei >= _info.softCapInWei,
             "Wrong params"
         );
+        if(Calculations.wethReturn(address(safeLibrary)) != _addition.nativeToken && _info.isCertified) {
+            require(_addition.nativeToken == safeLibrary.tether() || _addition.nativeToken == safeLibrary.usdCoin(), "Stablecoin is not whitelisted");
+        }
 
         ERC20 _token = ERC20(_info.tokenAddress);
 

@@ -47,4 +47,12 @@ library Calculations {
         require(tokenAmounts[0] > 0 && tokenAmounts[1] > 0, "Wrong parameters");
         return tokenAmounts;
     }
+
+    function wethReturn(address _library) external view returns(address){
+        LessLibrary safeLibrary = LessLibrary(_library);
+        IUniswapV2Router02 uniswap = IUniswapV2Router02(
+            safeLibrary.getUniswapRouter()
+        );
+        return uniswap.WETH();
+    }
 }
