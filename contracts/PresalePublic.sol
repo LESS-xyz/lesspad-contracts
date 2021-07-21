@@ -25,9 +25,7 @@ contract PresalePublic is ReentrancyGuard {
     uint256 private lpAmount;
     address private devAddress;
     uint256 private tokenMagnitude;
-    address private tokenAddress;
     address private WETHAddress;
-    address private bnbAddress = address(0);
 
     mapping(address => uint256) public voters;
     mapping(address => uint256) public claimed; // if 1, it means investor already claimed the tokens or got a refund
@@ -38,8 +36,6 @@ contract PresalePublic is ReentrancyGuard {
     mapping(address => bool) private whitelistTierTwo;
  
     address[][5] public whitelist; //for backend
-    
-    mapping(bytes32 => uint256) public usedSignature;
 
     TicketsInfo[] public tickets;
 
@@ -155,10 +151,10 @@ contract PresalePublic is ReentrancyGuard {
         _;
     }
 
-    modifier votesPassed() {
+    modifier votesPassed(uint256 totalStakedAmount) {
         require(
             intermediate.yesVotes >= intermediate.noVotes &&
-                intermediate.yesVotes >= lessLib.getMinYesVotesThreshold() && block.timestamp >= generalInfo.closeTimeVoting,
+                intermediate.yesVotes >= lessLib.getMinYesVotesThreshold(totalStakedAmount) && block.timestamp >= generalInfo.closeTimeVoting,
             "Votes not passed"
         );
         _;
@@ -179,21 +175,19 @@ contract PresalePublic is ReentrancyGuard {
         _;
     }
 
+    receive() external payable {}
+
     constructor(
         address payable _factory,
         address _library,
         address _platformOwner,
-        address _devAddress,
-        address _tokenAddress,
-        address _WETHAddress
+        address _devAddress
     )  {
         require(_factory != address(0) && _library != address(0) && _platformOwner != address(0) && _devAddress != address(0));
         lessLib = LessLibrary(_library);
         factoryAddress = _factory;
         platformOwner = _platformOwner;
         devAddress = _devAddress;
-        tokenAddress = _tokenAddress;
-        WETHAddress = _WETHAddress;
         //generalInfo.closeTimeVoting = block.timestamp + lessLib.getVotingTime();
     }
 
@@ -314,6 +308,7 @@ contract PresalePublic is ReentrancyGuard {
     // }
 
     function registerTierOneTwo(uint256 _tokenAmount, uint256 _tier, uint256 _timestamp, bytes memory _signature) external openRegister {
+        require(!lessLib.getSignUsed(_signature), "used sign");
         require(
             lessLib._verifySigner(abi.encodePacked(_tokenAmount, msg.sender, address(this), _timestamp), _signature),
             "w sign"
@@ -328,10 +323,11 @@ contract PresalePublic is ReentrancyGuard {
             whitelistTierTwo[msg.sender] = true;
             whitelist[_tier].push(msg.sender);
         }
-        usedSignature[keccak256(_signature)] = 1;
+        lessLib.setSingUsed(_signature, address(this));
     }
 
     function register(uint256 _tokenAmount, uint256 _tier, uint256 _timestamp, bytes memory _signature) external openRegister {
+        require(!lessLib.getSignUsed(_signature), "used sign");
         require(
            lessLib._verifySigner(abi.encodePacked(_tokenAmount, msg.sender, address(this), _timestamp), _signature),
            "invalid signature"
@@ -339,10 +335,11 @@ contract PresalePublic is ReentrancyGuard {
         require(!whitelistTierThreeFive[msg.sender], "al. whitelisted");
         whitelistTierThreeFive[msg.sender] = true;
         whitelist[_tier].push(msg.sender);
-        usedSignature[keccak256(_signature)] = 1;
+        lessLib.setSingUsed(_signature, address(this));
     }
 
     function vote(bool _yes, uint256 _stakingAmount, uint256 _timestamp, bytes memory _signature) external onlyWhenOpenVoting presaleIsNotCancelled notCreator{
+        require(!lessLib.getSignUsed(_signature), "used sign");
         require(lessLib._verifySigner(abi.encodePacked(_stakingAmount, msg.sender, address(this), _timestamp), _signature));
         uint256 safeBalance = _stakingAmount;
 
@@ -358,17 +355,17 @@ contract PresalePublic is ReentrancyGuard {
         } else {
             intermediate.noVotes = intermediate.noVotes + safeBalance;
         }
-        usedSignature[keccak256(_signature)] = 1;
+        lessLib.setSingUsed(_signature, address(this));
     }
 
     // _tokenAmount only for non bnb tokens
     // poolPercentages starts from 5th to 2nd teirs
     // Staking tiers also starts from 5th to 2nd tiers
     function invest(
-        uint256 _tokenAmount, 
+        uint256 amount, 
         bytes memory _signature, 
-        uint256 _stakedAmount, 
-        bool _isTierOneTwo, 
+        uint256 _stakedAmount,
+        uint256 _totalStakedAmount,
         uint256 _timestamp,
         uint256[4] memory poolPercentages,
         uint256[4] memory stakingTiers
@@ -377,18 +374,14 @@ contract PresalePublic is ReentrancyGuard {
         payable
         presaleIsNotCancelled
         onlyWhenOpenPresale
-        votesPassed
+        votesPassed(_totalStakedAmount)
         nonReentrant
         notCreator
     {
-        require(usedSignature[keccak256(_signature)] == 0);
-        if (_isTierOneTwo) {
-            require(lessLib._verifySigner(abi.encodePacked(_stakedAmount, msg.sender, address(this), _timestamp), _signature));
-        } else {
-            require(lessLib._verifySigner(abi.encodePacked(_stakedAmount, msg.sender, address(this), _timestamp), _signature));
-        }
-
-        uint256 amount = (tokenAddress == bnbAddress) ? msg.value : _tokenAmount;
+        require(!lessLib.getSignUsed(_signature), "used sign");
+        require(lessLib._verifySigner(abi.encodePacked(_stakedAmount, msg.sender, address(this), _timestamp), _signature));
+        
+        //uint256 amount = _tokenAmount;
 
         uint256 tokensLeft;
         if(block.timestamp < generalInfo.openTimePresale + 3600){
@@ -450,13 +443,11 @@ contract PresalePublic is ReentrancyGuard {
         investments[msg.sender].amountEth = totalInvestmentInWei;
         investments[msg.sender].amountTokens += reservedTokens;
         generalInfo.tokensForSaleLeft = tokensLeft - reservedTokens;
-
-        usedSignature[keccak256(_signature)] = 1;
+        lessLib.setSingUsed(_signature, address(this));
     }
 
     function withdrawInvestment(address payable to, uint256 amount)
         external
-        votesPassed
         nonReentrant
     {
         require(
@@ -541,19 +532,12 @@ contract PresalePublic is ReentrancyGuard {
 
         token.approve(address(uniswapRouter), liqPoolTokenAmount);
 
-        IWETH wETH = IWETH(WETHAddress);
-        wETH.deposit{value: liqPoolEthAmount}();
-
-        wETH.approve(WETHAddress, liqPoolEthAmount);
-
-        (, , lpAmount) = uniswapRouter.addLiquidity(
+        (, , lpAmount) = uniswapRouter.addLiquidityETH{value: liqPoolEthAmount}(
             address(token),
-            WETHAddress,
             liqPoolTokenAmount,
-            liqPoolEthAmount,
             0,
             0,
-            payable(address(this)),
+            address(this),
             block.timestamp + 15 minutes
         );
 
@@ -606,31 +590,16 @@ contract PresalePublic is ReentrancyGuard {
         lpAmount = 0;
     }
 
-    /*function getUnsoldTokens()
-        external
-        presaleIsNotCancelled
-        nonReentrant
-        liquidityAdded
-        onlyOwners
-    {
-        uint256 unsoldTokensAmount =
-            generalInfo.tokensForSaleLeft + generalInfo.tokensForLiquidityLeft;
-        if (unsoldTokensAmount > 0) {
-            generalInfo.token.transfer(generalInfo.creator, unsoldTokensAmount);
-        }
-    }*/
-
-    function collectFee() external nonReentrant {
+    function collectFee(uint256 _totalStakedAmount) external nonReentrant {
         require(generalInfo.collectedFee != 0, "already withdrawn");
         if (intermediate.yesVotes >= intermediate.noVotes &&
-                intermediate.yesVotes >= lessLib.getMinYesVotesThreshold() && block.timestamp >= generalInfo.closeTimeVoting && !intermediate.cancelled) {
+                intermediate.yesVotes >= lessLib.getMinYesVotesThreshold(_totalStakedAmount) && block.timestamp >= generalInfo.closeTimeVoting && !intermediate.cancelled) {
                     payable(platformOwner).transfer(generalInfo.collectedFee);
                 }
         else {
             payable(generalInfo.creator).transfer(generalInfo.collectedFee);
             intermediate.cancelled = true;
         }
-        //payable(platformOwner).transfer(generalInfo.collectedFee);
         generalInfo.collectedFee = 0;
     }
 
@@ -712,7 +681,6 @@ contract PresalePublic is ReentrancyGuard {
             discount = pricePerToken / 10;
             return (_weiAmount * tokenMagnitude) / (pricePerToken - discount);
         }
-
         return 0;*/
 
         return (_weiAmount * tokenMagnitude) / generalInfo.tokenPriceInWei;
@@ -726,4 +694,3 @@ contract PresalePublic is ReentrancyGuard {
         }
     }
 }
-

@@ -2,7 +2,6 @@
 pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "./IStaking.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "./interface.sol";
 
@@ -11,11 +10,10 @@ contract LessLibrary is Ownable {
 
     uint256 private minInvestorBalance = 1000 * 1e18;
     uint256 private votingTime = 3 days; //three days
-    //uint256 private votingTime = 300;
     uint256 private minStakeTime = 1 days; //one day
     uint256 private minUnstakeTime = 6 days; //six days
 
-    address private factoryAddress;
+    address public factoryAddress;
 
     uint256 private minVoterBalance = 500 * 1e18; // minimum number of  tokens to hold to vote
     uint256 private minCreatorStakedBalance = 8000 * 1e18; // minimum number of tokens to hold to launch rocket
@@ -24,13 +22,14 @@ contract LessLibrary is Ownable {
     uint32 private usdtFee = 1 * 1e6;
 
     address private uniswapRouter; // uniswapV2 Router
-    address private tether = address(0x110a13FC3efE6A245B50102D2d79B3E76125Ae83);
+    address private tether;
 
     address payable private lessVault;
     address private devAddress;
-    IStaking public safeStakingPool;
+    //IStaking public safeStakingPool;
 
     mapping(address => bool) private isPresale;
+    mapping(bytes32 => bool) public usedSignature;
 
     struct PresaleInfo {
         bytes32 title;
@@ -110,12 +109,12 @@ contract LessLibrary is Ownable {
         return presaleAddresses[id].presaleAddress;
     }
 
-    function setPresaleAddress(uint256 id, address _newAddress)
+    /*function setPresaleAddress(uint256 id, address _newAddress)
         external
         onlyDev
     {
         presaleAddresses[id].presaleAddress = _newAddress;
-    }
+    }*/
 
     function changeDev(address _newDev) external onlyDev {
         require(_newDev != address(0), "Wrong new address");
@@ -127,10 +126,10 @@ contract LessLibrary is Ownable {
         votingTime = _newVotingTime;
     }
 
-    function setStakingAddress(address _staking) external onlyDev {
+    /*function setStakingAddress(address _staking) external onlyDev {
         require(_staking != address(0));
         safeStakingPool = IStaking(_staking);
-    }
+    }*/
 
     function getVotingTime() public view returns(uint256){
         return votingTime;
@@ -151,9 +150,9 @@ contract LessLibrary is Ownable {
     function getMinVoterBalance() external view returns (uint256) {
         return minVoterBalance;
     }
-
-    function getMinYesVotesThreshold() external view returns (uint256) {
-        uint256 stakedAmount = safeStakingPool.getStakedAmount();
+    //back!!!
+    function getMinYesVotesThreshold(uint256 totalStakedAmount) external pure returns (uint256) {
+        uint256 stakedAmount = totalStakedAmount;
         return stakedAmount / 10;
     }
 
@@ -165,7 +164,7 @@ contract LessLibrary is Ownable {
         return minCreatorStakedBalance;
     }
 
-    function getStakedSafeBalance(address sender)
+    /*function getStakedSafeBalance(address sender)
         public
         view
         returns (uint256)
@@ -178,7 +177,7 @@ contract LessLibrary is Ownable {
             return balance;
         }
         return 0;
-    }
+    }*/
 
     function getUniswapRouter() external view returns (address) {
         return uniswapRouter;
@@ -213,5 +212,14 @@ contract LessLibrary is Ownable {
             "Unauthorised signer"
         );
         return true;
+    }
+
+    function setSingUsed(bytes memory _sign, address _presale) external {
+        require(isPresale[_presale], "u have no permition");
+        usedSignature[keccak256(_sign)] = true;
+    }
+
+    function getSignUsed(bytes memory _sign) external view returns(bool) {
+        return usedSignature[keccak256(_sign)];
     }
 }
