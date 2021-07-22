@@ -13,7 +13,7 @@ contract LessLibrary is Ownable {
     uint256 private minStakeTime = 1 days; //one day
     uint256 private minUnstakeTime = 6 days; //six days
 
-    address public factoryAddress;
+    address[] public factoryAddress;
 
     uint256 private minVoterBalance = 500 * 1e18; // minimum number of  tokens to hold to vote
     uint256 private minCreatorStakedBalance = 8000 * 1e18; // minimum number of tokens to hold to launch rocket
@@ -50,7 +50,12 @@ contract LessLibrary is Ownable {
     }
 
     modifier onlyFactory() {
-        require(factoryAddress == msg.sender, "onlyFactory");
+        require(factoryAddress[0] == msg.sender || factoryAddress[1] == msg.sender, "onlyFactory");
+        _;
+    }
+
+    modifier factoryIndexCheck(uint8 _index){
+        require(_index == 0 || _index == 1, "Invalid index");
         _;
     }
 
@@ -64,9 +69,10 @@ contract LessLibrary is Ownable {
         usdCoin = _usdc;
     }
 
-    function setFactoryAddress(address _factory) external onlyDev {
+    function setFactoryAddress(address _factory, uint8 _index) external onlyDev factoryIndexCheck(_index){
         require(_factory != address(0));
-        factoryAddress = _factory;
+        //require(_index == 0 || _index == 1, "Invalid index");
+        factoryAddress[_index] = _factory;
     }
 
     function setUsdtFee(uint32 _newAmount) external onlyDev {
@@ -98,8 +104,6 @@ contract LessLibrary is Ownable {
     {
         presaleAddresses.push(PresaleInfo(_title, _presale, _description, _type));
         isPresale[_presale] = true;
-        //uint256 _id = presaleAddresses.length - 1;
-        //forAllPoolsSearch[_id] = PresaleInfo(_title, _presale, _description, _type);
         return presaleAddresses.length - 1;
     }
 
@@ -111,13 +115,6 @@ contract LessLibrary is Ownable {
         return presaleAddresses[id].presaleAddress;
     }
 
-    /*function setPresaleAddress(uint256 id, address _newAddress)
-        external
-        onlyDev
-    {
-        presaleAddresses[id].presaleAddress = _newAddress;
-    }*/
-
     function changeDev(address _newDev) external onlyDev {
         require(_newDev != address(0), "Wrong new address");
         devAddress = _newDev;
@@ -127,11 +124,6 @@ contract LessLibrary is Ownable {
         require(_newVotingTime > 0, "Wrong new time");
         votingTime = _newVotingTime;
     }
-
-    /*function setStakingAddress(address _staking) external onlyDev {
-        require(_staking != address(0));
-        safeStakingPool = IStaking(_staking);
-    }*/
 
     function getVotingTime() public view returns(uint256){
         return votingTime;
@@ -158,28 +150,14 @@ contract LessLibrary is Ownable {
         return stakedAmount / 10;
     }
 
-    function getFactoryAddress() external view returns (address) {
-        return factoryAddress;
+    function getFactoryAddress(uint8 _index) external view factoryIndexCheck(_index) returns (address) {
+        //require(_index == 0 || _index == 1, "Invalid index");
+        return factoryAddress[_index];
     }
 
     function getMinCreatorStakedBalance() external view returns (uint256) {
         return minCreatorStakedBalance;
     }
-
-    /*function getStakedSafeBalance(address sender)
-        public
-        view
-        returns (uint256)
-    {
-        uint256 balance;
-        uint256 lastStakedTimestamp;
-        (balance, lastStakedTimestamp, ) = safeStakingPool.getStakedInfo(sender);
-
-        if (lastStakedTimestamp + minStakeTime <= block.timestamp) {
-            return balance;
-        }
-        return 0;
-    }*/
 
     function getUniswapRouter() external view returns (address) {
         return uniswapRouter;
@@ -201,12 +179,13 @@ contract LessLibrary is Ownable {
         return presaleAddresses;
     }
     
-    function _verifySigner(bytes memory data, bytes memory signature)
+    function _verifySigner(bytes memory data, bytes memory signature, uint8 _index)
         public
         view
+        factoryIndexCheck(_index)
         returns (bool)
     {
-        IPresaleFactory presaleFactory = IPresaleFactory(payable(factoryAddress));
+        IPresaleFactory presaleFactory = IPresaleFactory(payable(factoryAddress[_index]));
         address messageSigner =
             ECDSA.recover(keccak256(data), signature);
         require(

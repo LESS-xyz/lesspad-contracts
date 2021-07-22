@@ -51,16 +51,3 @@ interface IUniswapV2Factory02 {
 interface IPresaleFactory {
     function isSigner(address _address) external view returns (bool);
 }
-
-interface IStaking {
-    function getStakedInfo(address _sender)
-        external
-        view
-        returns (
-            uint256,
-            uint256,
-            uint256
-        );
-
-    function getOverallBalanceInLess() external view returns (uint256);
-}
