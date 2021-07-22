@@ -1,13 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-//import "./LessLibrary.sol";
 import "./libraries/Calculations.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
-
-//import "./interface.sol";
 
 contract PresaleCertified is ReentrancyGuard {
     uint256 public id;
@@ -32,9 +29,7 @@ contract PresaleCertified is ReentrancyGuard {
     mapping(address => uint256) public claimed; // if true, it means investor already claimed the tokens or got a refund
     mapping(address => Investment) public investments; // total wei invested per address
 
-    mapping(address => bool) private whitelistTierThreeFive;
-    mapping(address => bool) private whitelistTierOne;
-    mapping(address => bool) private whitelistTierTwo;
+    mapping(address => bool) private whitelistTier;
 
     address[][5] public whitelist; //for backend
 
@@ -64,7 +59,6 @@ contract PresaleCertified is ReentrancyGuard {
         bool liquidity;
         bool automatically;
         uint8 vesting;
-        bool whitelisted;
         address[] whitelist;
         address nativeToken;
     }
@@ -117,19 +111,6 @@ contract PresaleCertified is ReentrancyGuard {
         _;
     }
 
-    modifier onlyOwners() {
-        require(
-            msg.sender == generalInfo.creator || msg.sender == platformOwner,
-            "Only owner"
-        );
-        _;
-    }
-
-    modifier notCreator() {
-        require(msg.sender != generalInfo.creator, "No permition");
-        _;
-    }
-
     modifier liquidityAdded() {
         require(intermediate.liquidityAdded, "Add liquidity");
         _;
@@ -140,7 +121,7 @@ contract PresaleCertified is ReentrancyGuard {
         require(
             nowTime >= generalInfo.openTimePresale &&
                 nowTime <= generalInfo.closeTimePresale,
-            "No presales"
+            "Presale not open"
         );
         _;
     }
@@ -155,19 +136,6 @@ contract PresaleCertified is ReentrancyGuard {
             block.timestamp >= generalInfo.openTimePresale - 86400 &&
                 block.timestamp < generalInfo.openTimePresale,
             "Not registration time"
-        );
-        _;
-    }
-
-    modifier inWhitelist() {
-        require(whitelistTierThreeFive[msg.sender], "not in whitelist");
-        _;
-    }
-
-    modifier inWhitelistTierOneTwo() {
-        require(
-            whitelistTierOne[msg.sender] || whitelistTierTwo[msg.sender],
-            "not in whitelist"
         );
         _;
     }
@@ -252,21 +220,23 @@ contract PresaleCertified is ReentrancyGuard {
         bool _liquidity,
         bool _automatically,
         uint8 _vesting,
-        bool _whitelisted,
         address[] memory _whitelist,
         address _nativeToken
     ) external onlyFabric {
         if (_automatically) {
             require(_liquidity, "Wrong automatically liquidity param");
         }
-        if (_whitelist.length != 0) {
-            require(_whitelisted, "Wrong whitelist param");
+        uint256 len = _whitelist.length;
+        if (len != 0) {
+            //require(_whitelisted, "Wrong whitelist param");
+            for (uint256 i = 0; i < len; i++) {
+                whitelistTier[_whitelist[i]] = true;
+            }
         }
         certifiedAddition = CertifiedAddition(
             _liquidity,
             _automatically,
             _vesting,
-            _whitelisted,
             _whitelist,
             _nativeToken
         );
@@ -321,53 +291,21 @@ contract PresaleCertified is ReentrancyGuard {
     }
 
     function getWhitelist(uint256 _tier)
-        public
+        external
         view
         returns (address[] memory)
     {
-        return whitelist[_tier];
+        if(certifiedAddition.whitelist.length > 0){
+            return certifiedAddition.whitelist;
+        } else{
+            return whitelist[_tier];
+        }
     }
 
-    function isWhitelisting() public view returns (bool) {
+    function isWhitelisting() external view returns (bool) {
         return
             block.timestamp <= generalInfo.openTimePresale &&
             block.timestamp >= generalInfo.openTimePresale - 86400;
-    }
-
-    function registerTierOneTwo(
-        uint256 _tokenAmount,
-        uint256 _tier,
-        uint256 _timestamp,
-        bytes memory _signature
-    ) external openRegister {
-        require(!certifiedAddition.whitelisted, "There won't be registration");
-        require(!lessLib.getSignUsed(_signature), "used sign");
-        require(
-            lessLib._verifySigner(
-                abi.encodePacked(
-                    _tokenAmount,
-                    msg.sender,
-                    address(this),
-                    _timestamp
-                ),
-                _signature
-            ),
-            "w sign"
-        );
-        tickets.push(TicketsInfo(msg.sender, _tokenAmount / 500));
-        if (
-            _tokenAmount >= 1000 * tokenMagnitude &&
-            _tokenAmount < 5000 * tokenMagnitude
-        ) {
-            require(!whitelistTierOne[msg.sender], "al. whitelisted");
-            whitelistTierOne[msg.sender] = true;
-            whitelist[_tier].push(msg.sender);
-        } else if (_tokenAmount >= 5000 * tokenMagnitude) {
-            require(!whitelistTierTwo[msg.sender], "al. whitelisted");
-            whitelistTierTwo[msg.sender] = true;
-            whitelist[_tier].push(msg.sender);
-        }
-        lessLib.setSingUsed(_signature, address(this));
     }
 
     function register(
@@ -376,7 +314,7 @@ contract PresaleCertified is ReentrancyGuard {
         uint256 _timestamp,
         bytes memory _signature
     ) external openRegister {
-        require(!certifiedAddition.whitelisted, "There won't be registration");
+        require(certifiedAddition.whitelist.length > 0, "There won't be registration");
         require(!lessLib.getSignUsed(_signature), "used sign");
         require(
             lessLib._verifySigner(
@@ -386,12 +324,16 @@ contract PresaleCertified is ReentrancyGuard {
                     address(this),
                     _timestamp
                 ),
-                _signature
+                _signature,
+                1
             ),
-            "invalid signature"
+            "w sign"
         );
-        require(!whitelistTierThreeFive[msg.sender], "al. whitelisted");
-        whitelistTierThreeFive[msg.sender] = true;
+        if (_tier < 3) {
+            tickets.push(TicketsInfo(msg.sender, _tokenAmount / 500));
+        }
+        require(!whitelistTier[msg.sender], "al. whitelisted");
+        whitelistTier[msg.sender] = true;
         whitelist[_tier].push(msg.sender);
         lessLib.setSingUsed(_signature, address(this));
     }
@@ -399,10 +341,10 @@ contract PresaleCertified is ReentrancyGuard {
     function addInWhitelist(address addr) external onlyPresaleCreator {
         require(addr != address(0), "Wrong address");
         require(
-            certifiedAddition.whitelisted,
-            "General registration is provided"
+            block.timestamp < generalInfo.openTimePresale,
+            "Presale is running"
         );
-        certifiedAddition.whitelist.push(addr);
+        whitelistTier[addr] = true;
     }
 
     // _tokenAmount only for non bnb tokens
@@ -415,14 +357,9 @@ contract PresaleCertified is ReentrancyGuard {
         uint256 _timestamp,
         uint256[4] memory poolPercentages,
         uint256[4] memory stakingTiers
-    )
-        public
-        payable
-        presaleIsNotCancelled
-        onlyWhenOpenPresale
-        nonReentrant
-        notCreator
-    {
+    ) public payable presaleIsNotCancelled onlyWhenOpenPresale nonReentrant {
+        require(whitelistTier[msg.sender], "not in whitelist");
+        require(msg.sender != generalInfo.creator, "No permition");
         require(!lessLib.getSignUsed(_signature), "used sign");
         require(
             lessLib._verifySigner(
@@ -432,8 +369,10 @@ contract PresaleCertified is ReentrancyGuard {
                     address(this),
                     _timestamp
                 ),
-                _signature
-            )
+                _signature,
+                1
+            ),
+            "wrong sign"
         );
         require(intermediate.approved, "Presale is not approved");
 
@@ -536,7 +475,7 @@ contract PresaleCertified is ReentrancyGuard {
                 claimed[msg.sender] < investments[msg.sender].amountTokens &&
                 investments[msg.sender].amountEth != 0
         );
-        if(certifiedAddition.vesting == 0){
+        if (certifiedAddition.vesting == 0) {
             claimed[msg.sender] = investments[msg.sender].amountTokens; // make sure this goes first before transfer to prevent reentrancy
             require(
                 generalInfo.token.transfer(
@@ -545,24 +484,24 @@ contract PresaleCertified is ReentrancyGuard {
                 ),
                 "Can't get your tokens"
             );
-        }
-        else {
-            uint256 part = investments[msg.sender].amountTokens * certifiedAddition.vesting / 100;
-            if (part <= investments[msg.sender].amountTokens - claimed[msg.sender]){
+        } else {
+            uint256 part = (investments[msg.sender].amountTokens *
+                certifiedAddition.vesting) / 100;
+            if (
+                part <=
+                investments[msg.sender].amountTokens - claimed[msg.sender]
+            ) {
                 require(
-                    generalInfo.token.transfer(
-                        msg.sender,
-                        part
-                    ),
+                    generalInfo.token.transfer(msg.sender, part),
                     "Can't get your tokens"
                 );
                 claimed[msg.sender] += part;
-            }
-            else {
+            } else {
                 require(
                     generalInfo.token.transfer(
                         msg.sender,
-                        investments[msg.sender].amountTokens - claimed[msg.sender]
+                        investments[msg.sender].amountTokens -
+                            claimed[msg.sender]
                     ),
                     "Can't get your tokens"
                 );
@@ -707,10 +646,7 @@ contract PresaleCertified is ReentrancyGuard {
 
     function collectFee() external nonReentrant {
         require(generalInfo.collectedFee != 0, "already withdrawn");
-        if (
-            intermediate.approved &&
-            !intermediate.cancelled
-        ) {
+        if (intermediate.approved && !intermediate.cancelled) {
             payable(platformOwner).transfer(generalInfo.collectedFee);
         } else {
             payable(generalInfo.creator).transfer(generalInfo.collectedFee);
@@ -723,14 +659,11 @@ contract PresaleCertified is ReentrancyGuard {
     function changePresaleTime(uint256 _newOpenTime, uint256 _newCloseTime)
         external
         presaleIsNotCancelled
-        onlyOwners
+        onlyPresaleCreator
     {
         require(block.timestamp < generalInfo.openTimePresale, "started");
-        if (!certifiedAddition.whitelisted) {
-            require(
-                _newOpenTime > block.timestamp + 86400,
-                "wrong param"
-            );
+        if (certifiedAddition.whitelist.length > 0) {
+            require(_newOpenTime > block.timestamp + 86400, "wrong param");
         }
         require(
             _newCloseTime > _newOpenTime &&

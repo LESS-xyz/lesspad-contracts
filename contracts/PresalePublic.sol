@@ -31,9 +31,7 @@ contract PresalePublic is ReentrancyGuard {
     mapping(address => uint256) public claimed; // if 1, it means investor already claimed the tokens or got a refund
     mapping(address => Investment) public investments; // total wei invested per address
 
-    mapping(address => bool) private whitelistTierThreeFive;
-    mapping(address => bool) private whitelistTierOne;
-    mapping(address => bool) private whitelistTierTwo;
+    mapping(address => bool) private whitelistMap;
  
     address[][5] public whitelist; //for backend
 
@@ -165,16 +163,6 @@ contract PresalePublic is ReentrancyGuard {
         _;
     }
 
-    modifier inWhitelist() {
-        require(whitelistTierThreeFive[msg.sender], "not in whitelist");
-        _;
-    }
-
-    modifier inWhitelistTierOneTwo() {
-        require(whitelistTierOne[msg.sender] || whitelistTierTwo[msg.sender], "not in whitelist");
-        _;
-    }
-
     receive() external payable {}
 
     constructor(
@@ -292,55 +280,30 @@ contract PresalePublic is ReentrancyGuard {
         );
     }
 
-    function getWhitelist(uint256 _tier) public view returns(address[] memory) {
+    function getWhitelist(uint256 _tier) external view returns(address[] memory) {
         return whitelist[_tier];
     }
 
-    function isWhitelisting() public view returns(bool) {
+    function isWhitelisting() external view returns(bool) {
         return block.timestamp <= generalInfo.openTimePresale;
-    }
-
-    // function getWhitelistLength(uint256 _tier) 
-    //     public
-    //     view
-    // returns (uint256) {
-    //     return whitelist[_tier].length;     
-    // }
-
-    function registerTierOneTwo(uint256 _tokenAmount, uint256 _tier, uint256 _timestamp, bytes memory _signature) external openRegister {
-        require(!lessLib.getSignUsed(_signature), "used sign");
-        require(
-            lessLib._verifySigner(abi.encodePacked(_tokenAmount, msg.sender, address(this), _timestamp), _signature),
-            "w sign"
-        );
-        tickets.push(TicketsInfo(msg.sender, _tokenAmount/500));
-        if (_tokenAmount >= 1000 * tokenMagnitude &&  _tokenAmount < 5000 * tokenMagnitude) {
-            require(!whitelistTierOne[msg.sender], "al. whitelisted");
-            whitelistTierOne[msg.sender] = true;
-            whitelist[_tier].push(msg.sender);
-        } else if (_tokenAmount >= 5000 * tokenMagnitude) {
-            require(!whitelistTierTwo[msg.sender], "al. whitelisted");
-            whitelistTierTwo[msg.sender] = true;
-            whitelist[_tier].push(msg.sender);
-        }
-        lessLib.setSingUsed(_signature, address(this));
     }
 
     function register(uint256 _tokenAmount, uint256 _tier, uint256 _timestamp, bytes memory _signature) external openRegister {
         require(!lessLib.getSignUsed(_signature), "used sign");
         require(
-           lessLib._verifySigner(abi.encodePacked(_tokenAmount, msg.sender, address(this), _timestamp), _signature),
+           lessLib._verifySigner(abi.encodePacked(_tokenAmount, msg.sender, address(this), _timestamp), _signature, 0),
            "invalid signature"
         );
-        require(!whitelistTierThreeFive[msg.sender], "al. whitelisted");
-        whitelistTierThreeFive[msg.sender] = true;
+        require(!whitelistMap[msg.sender], "al. whitelisted");
+        if (_tier < 3) tickets.push(TicketsInfo(msg.sender, _tokenAmount/500));
+        whitelistMap[msg.sender] = true;
         whitelist[_tier].push(msg.sender);
         lessLib.setSingUsed(_signature, address(this));
     }
 
     function vote(bool _yes, uint256 _stakingAmount, uint256 _timestamp, bytes memory _signature) external onlyWhenOpenVoting presaleIsNotCancelled notCreator{
         require(!lessLib.getSignUsed(_signature), "used sign");
-        require(lessLib._verifySigner(abi.encodePacked(_stakingAmount, msg.sender, address(this), _timestamp), _signature));
+        require(lessLib._verifySigner(abi.encodePacked(_stakingAmount, msg.sender, address(this), _timestamp), _signature, 0));
         uint256 safeBalance = _stakingAmount;
 
         require(
@@ -379,7 +342,7 @@ contract PresalePublic is ReentrancyGuard {
         notCreator
     {
         require(!lessLib.getSignUsed(_signature), "used sign");
-        require(lessLib._verifySigner(abi.encodePacked(_stakedAmount, msg.sender, address(this), _timestamp), _signature));
+        require(lessLib._verifySigner(abi.encodePacked(_stakedAmount, msg.sender, address(this), _timestamp), _signature, 0));
         
         //uint256 amount = _tokenAmount;
 
@@ -664,25 +627,6 @@ contract PresalePublic is ReentrancyGuard {
         view
         returns (uint256)
     {
-        /*uint256 amount = lessLib.getStakedSafeBalance(msg.sender);
-        uint256 discount = 0;
-        uint256 pricePerToken = generalInfo.tokenPriceInWei;
-        if (amount < 15000) {
-            return (_weiAmount * tokenMagnitude) / pricePerToken;
-        } else if (amount >= 15000 && amount < 75000) {
-            return (_weiAmount * tokenMagnitude) / pricePerToken;
-        } else if (amount >= 75000 && amount < 150000) {
-            discount = (pricePerToken * 5) / 100;
-            return (_weiAmount * tokenMagnitude) / (pricePerToken - discount);
-        } else if (amount >= 150000 && amount < 325000) {
-            discount = (pricePerToken * 7) / 100;
-            return (_weiAmount * tokenMagnitude) / (pricePerToken - discount);
-        } else if (amount >= 700000) {
-            discount = pricePerToken / 10;
-            return (_weiAmount * tokenMagnitude) / (pricePerToken - discount);
-        }
-        return 0;*/
-
         return (_weiAmount * tokenMagnitude) / generalInfo.tokenPriceInWei;
     }
 

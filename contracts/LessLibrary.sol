@@ -27,10 +27,10 @@ contract LessLibrary is Ownable {
 
     address payable private lessVault;
     address private devAddress;
-    //IStaking public safeStakingPool;
 
     mapping(address => bool) private isPresale;
-    mapping(bytes32 => bool) public usedSignature;
+    mapping(bytes32 => bool) private usedSignature;
+    mapping(address => bool) private signers; //adresses that can call sign functions
 
     struct PresaleInfo {
         bytes32 title;
@@ -125,7 +125,7 @@ contract LessLibrary is Ownable {
         votingTime = _newVotingTime;
     }
 
-    function getVotingTime() public view returns(uint256){
+    function getVotingTime() external view returns(uint256){
         return votingTime;
     }
 
@@ -185,11 +185,11 @@ contract LessLibrary is Ownable {
         factoryIndexCheck(_index)
         returns (bool)
     {
-        IPresaleFactory presaleFactory = IPresaleFactory(payable(factoryAddress[_index]));
+        //IPresaleFactory presaleFactory = IPresaleFactory(payable(factoryAddress[_index]));
         address messageSigner =
             ECDSA.recover(keccak256(data), signature);
         require(
-            presaleFactory.isSigner(messageSigner),
+            isSigner(messageSigner),
             "Unauthorised signer"
         );
         return true;
@@ -202,5 +202,13 @@ contract LessLibrary is Ownable {
 
     function getSignUsed(bytes memory _sign) external view returns(bool) {
         return usedSignature[keccak256(_sign)];
+    }
+
+    function addOrRemoveSigner(address _address, bool _canSign) external onlyDev {
+        signers[_address] = _canSign;
+    }
+
+    function isSigner(address _address) internal view returns (bool) {
+        return signers[_address];
     }
 }

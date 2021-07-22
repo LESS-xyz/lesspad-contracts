@@ -47,7 +47,3 @@ interface IUniswapV2Factory02 {
         view
         returns (address pair);
 }
-
-interface IPresaleFactory {
-    function isSigner(address _address) external view returns (bool);
-}

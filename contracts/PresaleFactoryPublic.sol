@@ -11,7 +11,6 @@ contract PresaleFactoryPublic {
     ERC20 public lessToken;
     PresalePublic presale;
     address public owner;
-    mapping(address => bool) private signers; //adresses that can call sign functions
 
     struct PresaleInfo {
         address tokenAddress;
@@ -90,7 +89,8 @@ contract PresaleFactoryPublic {
                     _info._tokenAmount,
                     _info._timestamp
                 ),
-                _info._signature
+                _info._signature,
+                0
             ),
             "invalid signature"
         );
@@ -199,13 +199,5 @@ contract PresaleFactoryPublic {
 
     function migrateTo(address payable _newFactory) external onlyDev {
         _newFactory.transfer(address(this).balance);
-    }
-
-    function addOrRemoveSigner(address _address, bool _canSign) public onlyDev {
-        signers[_address] = _canSign;
-    }
-
-    function isSigner(address _address) public view returns (bool) {
-        return signers[_address];
     }
 }

@@ -11,7 +11,6 @@ contract PresaleFactoryCertified {
     ERC20 public lessToken;
     PresaleCertified presale;
     address public owner;
-    mapping(address => bool) private signers; //adresses that can call sign functions
 
     struct PresaleInfo {
         address tokenAddress;
@@ -30,7 +29,6 @@ contract PresaleFactoryCertified {
         bool liquidity;
         bool automatically;
         uint8 vesting;
-        bool whitelisted;
         address[] whitelist;
         address nativeToken;
     }
@@ -104,7 +102,8 @@ contract PresaleFactoryCertified {
                     _info._tokenAmount,
                     _info._timestamp
                 ),
-                _info._signature
+                _info._signature,
+                1
             ),
             "invalid signature"
         );
@@ -209,7 +208,6 @@ contract PresaleFactoryCertified {
             _addition.liquidity,
             _addition.automatically,
             _addition.vesting,
-            _addition.whitelisted,
             _addition.whitelist,
             _addition.nativeToken
         );
@@ -236,13 +234,5 @@ contract PresaleFactoryCertified {
 
     function migrateTo(address payable _newFactory) external onlyDev {
         _newFactory.transfer(address(this).balance);
-    }
-
-    function addOrRemoveSigner(address _address, bool _canSign) public onlyDev {
-        signers[_address] = _canSign;
-    }
-
-    function isSigner(address _address) public view returns (bool) {
-        return signers[_address];
     }
 }
