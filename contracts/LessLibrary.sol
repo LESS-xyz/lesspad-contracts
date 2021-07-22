@@ -13,7 +13,7 @@ contract LessLibrary is Ownable {
     uint256 private minStakeTime = 1 days; //one day
     uint256 private minUnstakeTime = 6 days; //six days
 
-    address[] public factoryAddress;
+    address[] public factoryAddress = new address[](2);
 
     uint256 private minVoterBalance = 500 * 1e18; // minimum number of  tokens to hold to vote
     uint256 private minCreatorStakedBalance = 8000 * 1e18; // minimum number of tokens to hold to launch rocket
@@ -70,7 +70,7 @@ contract LessLibrary is Ownable {
     }
 
     function setFactoryAddress(address _factory, uint8 _index) external onlyDev factoryIndexCheck(_index){
-        require(_factory != address(0));
+        require(_factory != address(0), "not 0");
         //require(_index == 0 || _index == 1, "Invalid index");
         factoryAddress[_index] = _factory;
     }
