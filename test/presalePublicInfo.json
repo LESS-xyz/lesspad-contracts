@@ -1,8 +1,11 @@
 {
-    "tokenAddress": "0x662ae45fe98dfd93ea0eab6ade75fd42bfab48fd",
-    "tokenPriceInWei": "100000000000000",
-    "hardCapInWei": "1000000000000000000",
-    "softCapInWei": "50000000000000000",
-    "openTime": "",
-    "closeTime": ""
+    "tokenAddress": "0xd16787110bfe152d44563f8629e213baa30995c8",
+    "tokenPriceInWei": "10000000000000000",
+    "hardCapInWei": "4000000000000000000",
+    "softCapInWei": "2000000000000000000",
+    "openTime": "1627122718",
+    "closeTime": "1627209118",
+    "_tokenAmount": "0",
+    "_signature": "0xfb9ddbc4db52a077bdc8e972855a28dbe54693b6091e8f13690a95b066216fd5003df1bc04ff4c079786f5773178b7caee110d04c32cf1be9e7c57b904adced81b",
+    "_timestamp": "2021072308251627028749"
 }

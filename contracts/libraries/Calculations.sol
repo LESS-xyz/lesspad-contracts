@@ -2,7 +2,7 @@
 pragma solidity ^0.8.0;
 
 import "../LessLibrary.sol";
-import "../interface.sol";
+//import "../interface.sol";
 
 library Calculations {
     function swapNativeToEth(address presale, address _library, address nativeToken, uint256 liqPoolEthAmount) external returns(uint256){

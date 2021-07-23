@@ -1,6 +1,6 @@
 {
-    "listingPriceInWei": "200000000000000",
-    "lpTokensLockDurationInDays": "10",
-    "liquidityPercentageAllocation": "5",
-    "liquidityAllocationTime": ""
+    "listingPriceInWei": "0",
+    "lpTokensLockDurationInDays": "0",
+    "liquidityPercentageAllocation": "0",
+    "liquidityAllocationTime": "1627295518"
 }

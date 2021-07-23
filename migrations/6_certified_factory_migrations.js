@@ -1,16 +1,16 @@
 const PresaleFactoryCertified = artifacts.require("PresaleFactoryCertified");
-const LessLibrary = artifacts.require("LessLibrary");
+//const LessLibrary = artifacts.require("LessLibrary");
 const Calculations = artifacts.require("Calculations");
 
 module.exports = function (deployer) {
   return deployer.then(async () => {
-    const calc = Calculations.at("0x531EAdCD741Bc487Eb6A918e2E42226e004C6528");
-    const library = LessLibrary.at("0xEeCC14c0964082B0Fe0765549dE07889e7A776e4");
+    const calc = Calculations.at("0x84720f32Ff38768177E4465Df220Fe0934b014be");
+    //const library = LessLibrary.at("0xEeCC14c0964082B0Fe0765549dE07889e7A776e4");
     await PresaleFactoryCertified.link(Calculations, calc.address);
     const factory = await deployer.deploy(
         PresaleFactoryCertified,
-        "0xEeCC14c0964082B0Fe0765549dE07889e7A776e4",
-        "0x5127500909f55455Ebdf1129aF369Fe45106756B"
+        "0x7BaABa8B15BfFf41573e4260E22226d7935Bbc60",
+        "0xe29da66439bcbdb71d508f41bad13250f561e38f"
     );
     console.log('Certified Factory\'s address ', factory.address);
     //await library.setFactoryAddress(factory.address, 1);

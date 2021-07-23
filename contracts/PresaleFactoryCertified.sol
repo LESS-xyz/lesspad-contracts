@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+//import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "./PresaleCertified.sol";
-import "./libraries/Calculations.sol";
+//import "./libraries/Calculations.sol";
 
-contract PresaleFactoryCertified {
+contract PresaleFactoryCertified is ReentrancyGuard {
 
     LessLibrary public immutable safeLibrary;
     ERC20 public lessToken;
@@ -17,7 +17,6 @@ contract PresaleFactoryCertified {
         uint256 tokenPriceInWei;
         uint256 hardCapInWei;
         uint256 softCapInWei;
-        uint256 openVotingTime;
         uint256 openTime;
         uint256 closeTime;
         uint256 _tokenAmount;
@@ -92,8 +91,8 @@ contract PresaleFactoryCertified {
         CertifiedAddition calldata _addition,
         PresalePancakeSwapInfo calldata _cakeInfo,
         PresaleStringInfo calldata _stringInfo
-    ) external payable returns (uint256 presaleId) {
-        require(safeLibrary.getSignUsed(_info._signature), "used sign");
+    ) external payable nonReentrant returns (uint256 presaleId) {
+        require(!safeLibrary.getSignUsed(_info._signature), "used sign");
         require(
             safeLibrary._verifySigner(
                 abi.encodePacked(
@@ -108,13 +107,20 @@ contract PresaleFactoryCertified {
             "invalid signature"
         );
         //timing check
+        if(_addition.liquidity) {
+            require(_info.closeTime < _cakeInfo.liquidityAllocationTime,
+            "timing err");
+        }
+        if(_addition.whitelist.length > 0){
+            require(block.timestamp + 86400 <=
+                _info.openTime, "timing err");
+        }
+        else {
+            require(block.timestamp <=
+                _info.openTime, "timing err");
+        }
         require(
-            _info.openTime > block.timestamp &&
-                _info.openVotingTime + safeLibrary.getVotingTime() + 86400 <=
-                _info.openTime &&
-                _info.openTime < _info.closeTime &&
-                _info.closeTime < _cakeInfo.liquidityAllocationTime,
-            "timing err"
+            _info.openTime < _info.closeTime, "timig err"
         );
         require(
             _info.tokenPriceInWei > 0 &&
@@ -123,6 +129,9 @@ contract PresaleFactoryCertified {
                 _info.hardCapInWei >= _info.softCapInWei,
             "Wrong params"
         );
+        if(_addition.liquidity){
+            require(_cakeInfo.liquidityPercentageAllocation == 0 && _cakeInfo.listingPriceInWei == 0, "Wrong liq param");
+        }
         if(Calculations.wethReturn(address(safeLibrary)) != _addition.nativeToken) {
             require(_addition.nativeToken == safeLibrary.tether() || _addition.nativeToken == safeLibrary.usdCoin(), "Stablecoin is not whitelisted");
         }

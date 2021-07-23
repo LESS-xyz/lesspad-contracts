@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "./LessLibrary.sol";
+import "./libraries/Calculations.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
-import "./interface.sol";
+//import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+//import "./interface.sol";
 
 contract PresalePublic is ReentrancyGuard {
     uint256 public id;
