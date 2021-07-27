@@ -3,11 +3,12 @@ pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Burnable.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 import "./LessLibrary.sol";
 import "./interface.sol";
 
 contract Staking is Ownable, ReentrancyGuard {
-    //STRUCTURES:
+    //STRUCTURES:--------------------------------------------------------
     struct AccountInfo {
         uint256 balance;
         uint256 lastStakedTimestamp;
@@ -58,7 +59,7 @@ contract Staking is Ownable, ReentrancyGuard {
         uint256 lessRewardsAmount;
     }
 
-    //FIELDS:
+    //FIELDS:----------------------------------------------------
     ERC20Burnable public lessToken;
     ERC20Burnable public lpToken;
     LessLibrary public safeLibrary;
@@ -78,7 +79,7 @@ contract Staking is Ownable, ReentrancyGuard {
     mapping(address => AccountInfo) private accountInfos;
     mapping(address => StakeItem[]) public stakeList;
 
-    //CONSTRUCTOR
+    //CONSTRUCTOR-------------------------------------------------------
     constructor(
         ERC20Burnable _lp,
         ERC20Burnable _less,
@@ -91,7 +92,7 @@ contract Staking is Ownable, ReentrancyGuard {
         minDaysStake = safeLibrary.getMinUnstakeTime();
     }
 
-    //EVENTS:
+    //EVENTS:-----------------------------------------------------------------
     event Staked(
         address staker,
         uint256 stakeId,
@@ -101,14 +102,14 @@ contract Staking is Ownable, ReentrancyGuard {
     );
 
     event Unstaked(Unstake);
-    //ENUMS:
+    //ENUMS:--------------------------------------------------
     enum BalanceType {
         Less,
         Lp,
         Both
     }
 
-    //MODIFIERS:
+    //MODIFIERS:---------------------------------------------------
     modifier onlyDev() {
         require(
             msg.sender == safeLibrary.getFactoryAddress() ||
@@ -119,7 +120,7 @@ contract Staking is Ownable, ReentrancyGuard {
         _;
     }
 
-    //EXTERNAL AND PUBLIC WRITE FUNCTIONS:
+    //EXTERNAL AND PUBLIC WRITE FUNCTIONS:---------------------------------------------------
 
     /**
      * @dev stake tokens
@@ -242,7 +243,7 @@ contract Staking is Ownable, ReentrancyGuard {
 
 
 
-//EXTERNAL AND PUBLIC READ FUNCTIONS:
+//EXTERNAL AND PUBLIC READ FUNCTIONS:--------------------------------------------------
 
     /**
      * @dev return info about user's staking balance.
@@ -308,21 +309,6 @@ contract Staking is Ownable, ReentrancyGuard {
     function getLpInLess(uint256 _amount) public view returns (uint256) {
         return _amount * lessPerLp;
     }
-
-    /**
-     * @dev return num of all LP on the contract
-     */
-    function getOverallLP() public view returns (uint256) {
-        return allLp;
-    }
-
-    /**
-     * @dev return num of all Less on the contract
-     */
-    function getOverallLess() public view returns (uint256) {
-        return allLess;
-    }
-
     /**
      * @dev return full contract balance converted in Less
      */
@@ -330,7 +316,11 @@ contract Staking is Ownable, ReentrancyGuard {
         return allLess + allLp * lessPerLp;
     }
 
-    //INTERNAL AND PRIVATE FUNCTIONS
+    function getAmountOfUsersStakes(address user) external view returns(uint256) {
+        return stakeList[user].length;
+    }
+
+    //INTERNAL AND PRIVATE FUNCTIONS-------------------------------------------------------
     function _unstake(
         uint256 lpAmount,
         uint256 lessAmount,
@@ -493,12 +483,21 @@ contract Staking is Ownable, ReentrancyGuard {
      */
 
     function burnPenalty(uint256 lp, uint256 less) internal {
+        // if (lp > 0) {
+        //     lpToken.burn(lp);
+        //     allLp -= lp;
+        // }
+        // if (less > 0) {
+        //     lessToken.burn(less);
+        //     allLess -= less;
+        // }
+
         if (lp > 0) {
-            lpToken.burn(lp);
+            lpToken.transfer(owner(), lp);
             allLp -= lp;
         }
         if (less > 0) {
-            lessToken.burn(less);
+            lessToken.transfer(owner(), less);
             allLess -= less;
         }
     }
@@ -559,9 +558,10 @@ contract Staking is Ownable, ReentrancyGuard {
             stakeList[staker].pop();
         } else {
             stakeList[staker][index] = stakeList[staker][
-                stakeList[staker].length
+                stakeList[staker].length - 1
             ];
             stakeList[staker].pop();
         }
     }
+    
 }
