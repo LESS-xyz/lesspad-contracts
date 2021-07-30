@@ -107,9 +107,8 @@ contract Staking is Ownable, ReentrancyGuard {
     //MODIFIERS:---------------------------------------------------
     modifier onlyDev() {
         require(
-            msg.sender == safeLibrary.getFactoryAddress() ||
-                msg.sender == safeLibrary.owner() ||
-                msg.sender == safeLibrary.getDev(),
+            msg.sender == safeLibrary.owner() ||
+            msg.sender == safeLibrary.getDev(),
             "Only Dev"
         );
         _;
@@ -326,7 +325,7 @@ contract Staking is Ownable, ReentrancyGuard {
         address staker = _msgSender();
         require(userStakes[staker].ids.length > 0, "Error: you haven't stakes");
 
-        bool isUnstakedEarlier = block.timestamp - stakes[id].startTime < minStakeTime;
+        bool isUnstakedEarlier = (block.timestamp - stakes[id].startTime) < minStakeTime;
 
         uint256 lpRewards = 0;
         uint256 lessRewards = 0;
@@ -417,6 +416,8 @@ contract Staking is Ownable, ReentrancyGuard {
         lessRewards =
             (deposit.stakedLess * totalLessRewards) /
             allLess;
+
+        return (lpRewards, lessRewards);
     }
 
     /**
