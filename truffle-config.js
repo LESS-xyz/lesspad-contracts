@@ -4,6 +4,7 @@ require('dotenv').config();
 const {
     ETHERSCAN_API_KEY,
     BSCSCAN_API_KEY,
+    MATIC_API_KEY,
     MNEMONIC,
     INFURA_ID_PROJECT,
 
@@ -25,6 +26,7 @@ module.exports = {
     api_keys: {
         etherscan: ETHERSCAN_API_KEY,
         bscscan: BSCSCAN_API_KEY,
+        polygonscan: MATIC_API_KEY
     },
 
     networks: {
@@ -93,7 +95,7 @@ module.exports = {
             skipDryRun: false
         },
         maticTestnet: {
-            provider: () => new HDWalletProvider(MNEMONIC, "https://rpc-mumbai.matic.today"),
+            provider: () => new HDWalletProvider(MNEMONIC, "https://matic-mumbai.chainstacklabs.com"),
             network_id: 80001,
             confirmations: 2,
             timeoutBlocks: 200,

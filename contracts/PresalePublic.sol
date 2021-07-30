@@ -43,8 +43,8 @@ contract PresalePublic is ReentrancyGuard {
     }
 
     struct PresaleInfo {
-        address payable creator;
-        IERC20 token;
+        address creator;
+        address token;
         uint256 tokenPriceInWei;
         uint256 hardCapInWei;
         uint256 softCapInWei;
@@ -217,8 +217,8 @@ contract PresalePublic is ReentrancyGuard {
         );
         require(_priceTokensForSaleLiquiditySoftHardOpenOpenCloseFee[8]>0, "No fee");
         generalInfo = PresaleInfo(
-            payable(_creatorToken[0]),
-            IERC20(_creatorToken[1]),
+            _creatorToken[0],
+            _creatorToken[1],
             _priceTokensForSaleLiquiditySoftHardOpenOpenCloseFee[0],
             _priceTokensForSaleLiquiditySoftHardOpenOpenCloseFee[4],
             _priceTokensForSaleLiquiditySoftHardOpenOpenCloseFee[3],
@@ -291,7 +291,7 @@ contract PresalePublic is ReentrancyGuard {
     function register(uint256 _tokenAmount, uint256 _tier, uint256 _timestamp, bytes memory _signature) external openRegister {
         require(!lessLib.getSignUsed(_signature), "used sign");
         require(
-           lessLib._verifySigner(abi.encodePacked(_tokenAmount, msg.sender, address(this), _timestamp), _signature, 0),
+           lessLib._verifySigner(keccak256(abi.encodePacked(_tokenAmount, msg.sender, address(this), _timestamp)), _signature, 0),
            "invalid signature"
         );
         require(!whitelistMap[msg.sender], "al. whitelisted");
@@ -303,7 +303,7 @@ contract PresalePublic is ReentrancyGuard {
 
     function vote(bool _yes, uint256 _stakingAmount, uint256 _timestamp, bytes memory _signature) external onlyWhenOpenVoting presaleIsNotCancelled notCreator{
         require(!lessLib.getSignUsed(_signature), "used sign");
-        require(lessLib._verifySigner(abi.encodePacked(_stakingAmount, msg.sender, address(this), _timestamp), _signature, 0));
+        require(lessLib._verifySigner(keccak256(abi.encodePacked(_stakingAmount, msg.sender, address(this), _timestamp)), _signature, 0));
         uint256 safeBalance = _stakingAmount;
 
         require(
@@ -342,7 +342,7 @@ contract PresalePublic is ReentrancyGuard {
         notCreator
     {
         require(!lessLib.getSignUsed(_signature), "used sign");
-        require(lessLib._verifySigner(abi.encodePacked(_stakedAmount, msg.sender, address(this), _timestamp), _signature, 0));
+        require(lessLib._verifySigner(keccak256(abi.encodePacked(_stakedAmount, msg.sender, address(this), _timestamp)), _signature, 0));
         
         //uint256 amount = _tokenAmount;
 
@@ -451,7 +451,7 @@ contract PresalePublic is ReentrancyGuard {
             investments[msg.sender].amountEth != 0
         );
         claimed[msg.sender] = 1; // make sure this goes first before transfer to prevent reentrancy
-        generalInfo.token.transfer(
+        IERC20(generalInfo.token).transfer(
             msg.sender,
             investments[msg.sender].amountTokens
         );
@@ -491,7 +491,7 @@ contract PresalePublic is ReentrancyGuard {
         IUniswapV2Router02 uniswapRouter =
             IUniswapV2Router02(address(lessLib.getUniswapRouter()));
 
-        IERC20 token = generalInfo.token;
+        IERC20 token = IERC20(generalInfo.token);
 
         token.approve(address(uniswapRouter), liqPoolTokenAmount);
 
@@ -532,7 +532,7 @@ contract PresalePublic is ReentrancyGuard {
         if (collectedBalance > 0) {
             uint256 fee = lessLib.calculateFee(collectedBalance);
             lessLib.getVaultAddress().transfer(fee);
-            generalInfo.creator.transfer(payable(address(this)).balance - generalInfo.collectedFee);
+            payable(generalInfo.creator).transfer(payable(address(this)).balance - generalInfo.collectedFee);
         }
         _withdrawUnsoldTokens();
         withdrawedFunds = true;
@@ -634,7 +634,7 @@ contract PresalePublic is ReentrancyGuard {
         uint256 unsoldTokensAmount =
             generalInfo.tokensForSaleLeft + generalInfo.tokensForLiquidityLeft;
         if (unsoldTokensAmount > 0) {
-            generalInfo.token.transfer(generalInfo.creator, unsoldTokensAmount);
+            IERC20(generalInfo.token).transfer(generalInfo.creator, unsoldTokensAmount);
         }
     }
 }

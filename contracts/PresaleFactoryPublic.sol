@@ -7,8 +7,8 @@ import "./PresalePublic.sol";
 contract PresaleFactoryPublic {
 
     LessLibrary public immutable safeLibrary;
-    ERC20 public lessToken;
-    PresalePublic presale;
+    //ERC20 public lessToken;
+    //PresalePublic presale;
     address public owner;
 
     struct PresaleInfo {
@@ -62,11 +62,10 @@ contract PresaleFactoryPublic {
     event Received(address indexed from, uint256 amount);
 
     constructor(
-        address _bscsInfoAddress,
-        address _bscsToken
+        address _bscsInfoAddress
     ) {
         safeLibrary = LessLibrary(_bscsInfoAddress);
-        lessToken = ERC20(_bscsToken);
+        //lessToken = ERC20(_bscsToken);
         owner = msg.sender;
     }
 
@@ -79,15 +78,15 @@ contract PresaleFactoryPublic {
         PresalePancakeSwapInfo calldata _cakeInfo,
         PresaleStringInfo calldata _stringInfo
     ) external payable returns (uint256 presaleId) {
-        require(safeLibrary.getSignUsed(_info._signature), "used sign");
+        require(!safeLibrary.getSignUsed(_info._signature), "used sign");
         require(
             safeLibrary._verifySigner(
-                abi.encodePacked(
-                    address(lessToken),
+                keccak256(abi.encodePacked(
+                    address(_info.tokenAddress),
                     msg.sender,
                     _info._tokenAmount,
                     _info._timestamp
-                ),
+                )),
                 _info._signature,
                 0
             ),
@@ -125,7 +124,7 @@ contract PresaleFactoryPublic {
             _token.decimals()
         );
 
-        presale = new PresalePublic(
+        PresalePublic presale = new PresalePublic(
             payable(address(this)),
             address(safeLibrary),
             safeLibrary.owner(),

@@ -8,8 +8,6 @@ import "./PresaleCertified.sol";
 contract PresaleFactoryCertified is ReentrancyGuard {
 
     LessLibrary public immutable safeLibrary;
-    ERC20 public lessToken;
-    PresaleCertified presale;
     address public owner;
 
     struct PresaleInfo {
@@ -74,11 +72,9 @@ contract PresaleFactoryCertified is ReentrancyGuard {
     event Received(address indexed from, uint256 amount);
 
     constructor(
-        address _bscsInfoAddress,
-        address _bscsToken
+        address _bscsInfoAddress
     ) {
         safeLibrary = LessLibrary(_bscsInfoAddress);
-        lessToken = ERC20(_bscsToken);
         owner = msg.sender;
     }
 
@@ -93,23 +89,25 @@ contract PresaleFactoryCertified is ReentrancyGuard {
         PresaleStringInfo calldata _stringInfo
     ) external payable nonReentrant returns (uint256 presaleId) {
         require(!safeLibrary.getSignUsed(_info._signature), "used sign");
-        require(
-            safeLibrary._verifySigner(
-                abi.encodePacked(
-                    address(lessToken),
+        bytes memory encoded = abi.encodePacked(
+                    _info.tokenAddress,
                     msg.sender,
                     _info._tokenAmount,
                     _info._timestamp
-                ),
+                );
+        /*require(
+            safeLibrary._verifySigner(
+                keccak256(encoded),
                 _info._signature,
                 1
             ),
             "invalid signature"
-        );
+        );*/
         //timing check
         if(_addition.liquidity) {
             require(_info.closeTime < _cakeInfo.liquidityAllocationTime,
             "timing err");
+            require(_cakeInfo.liquidityPercentageAllocation > 0 && _cakeInfo.listingPriceInWei > 0, "Wrong liq param");
         }
         if(_addition.whitelist.length > 0){
             require(block.timestamp + 86400 <=
@@ -120,7 +118,7 @@ contract PresaleFactoryCertified is ReentrancyGuard {
                 _info.openTime, "timing err");
         }
         require(
-            _info.openTime < _info.closeTime, "timig err"
+            6900 < _info.closeTime - _info.openTime, "timig err"
         );
         require(
             _info.tokenPriceInWei > 0 &&
@@ -129,16 +127,14 @@ contract PresaleFactoryCertified is ReentrancyGuard {
                 _info.hardCapInWei >= _info.softCapInWei,
             "Wrong params"
         );
-        if(_addition.liquidity){
-            require(_cakeInfo.liquidityPercentageAllocation == 0 && _cakeInfo.listingPriceInWei == 0, "Wrong liq param");
-        }
         if(Calculations.wethReturn(address(safeLibrary)) != _addition.nativeToken) {
-            require(_addition.nativeToken == safeLibrary.tether() || _addition.nativeToken == safeLibrary.usdCoin(), "Stablecoin is not whitelisted");
+            require(safeLibrary.isValidStablecoin(_addition.nativeToken), "Stablecoin is not whitelisted");
         }
 
         ERC20 _token = ERC20(_info.tokenAddress);
 
-        uint256 feeEth = Calculations.usdtToEthFee(address(safeLibrary));
+        //uint256 feeEth = Calculations.usdtToEthFee(address(safeLibrary));
+        uint256 feeEth = 50000000000000000;
         require(msg.value >= feeEth && feeEth > 0, "value<=0");
 
         // maxLiqPoolTokenAmount, maxTokensToBeSold, requiredTokenAmount
@@ -151,7 +147,7 @@ contract PresaleFactoryCertified is ReentrancyGuard {
             _token.decimals()
         );
 
-        presale = new PresaleCertified(
+        PresaleCertified presale = new PresaleCertified(
             payable(address(this)),
             address(safeLibrary),
             safeLibrary.owner(),
@@ -174,7 +170,7 @@ contract PresaleFactoryCertified is ReentrancyGuard {
             true
         );
         presale.setPresaleId(presaleId);
-        safeLibrary.setSingUsed(_info._signature, address(this));
+        //safeLibrary.setSingUsed(_info._signature, address(presale));
         if (_addition.liquidity && _addition.automatically) {
             emit CertifiedAutoPresaleCreated(
                 presaleId,

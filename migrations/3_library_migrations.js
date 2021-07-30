@@ -1,6 +1,18 @@
+require('dotenv').config();
+const {
+    MATIC_ROUTER, M_USDC, ETH_ROUTER, ETH_USDT, ETH_USDC
+} = process.env;
+
 const LessLibrary = artifacts.require("LessLibrary");
 
-module.exports = function (deployer) {
+module.exports = function (deployer, accounts, network) {
+  deployer.deploy(LessLibrary, "0x2f37c34a77d9235775b0a13ee220de2242ef98d2", "0xc164f38c8f338398aebed7b91b382fd4ef653cb5", MATIC_ROUTER, M_USDC, [M_USDC], 18);
+  /* if (network == "test" || network == "develop") {
+    deployer.deploy(LessLibrary, accounts[0], accounts[1], MATIC_ROUTER, M_USDC, [M_USDC], 18);
+  }
+  else {
+    deployer.deploy(LessLibrary, "0x6619D419A27bb005a0a51DA2610d036133E72a72", "0x8be1038D11c19F86071363E818A890014cBf3433", MATIC_ROUTER, M_USDC, [M_USDC], 18);
+  } */
   /*return deployer.then(async () => {
     const library = await deployer.deploy(
         LessLibrary,
@@ -13,5 +25,5 @@ module.exports = function (deployer) {
     console.log('Library\'s address ', library.address);
     //await library.
   })*/
-  deployer.deploy(LessLibrary, "0x6619D419A27bb005a0a51DA2610d036133E72a72", "0x8be1038D11c19F86071363E818A890014cBf3433", "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D", "0x07de306ff27a2b630b1141956844eb1552b956b5", "0xb7a4F3E9097C08dA09517b5aB877F7a917224ede");
+  //deployer.deploy(LessLibrary, "0x6619D419A27bb005a0a51DA2610d036133E72a72", "0x8be1038D11c19F86071363E818A890014cBf3433", MATIC_ROUTER, M_USDC, [M_USDC], 18);
 };
