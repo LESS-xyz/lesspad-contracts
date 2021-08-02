@@ -233,7 +233,7 @@ contract LessLibrary is Ownable {
         return signers[_address];
     }
 
-    function encoder(address _token, address _sender, uint256 _amount, uint256 _timestamp) public pure returns (bytes32) {
+    /* function encoder(address _token, address _sender, uint256 _amount, uint256 _timestamp) public pure returns (bytes32) {
         bytes memory enco = abi.encodePacked(
                     _token,
                     _sender,
@@ -245,5 +245,5 @@ contract LessLibrary is Ownable {
 
     function decoder(bytes32 data, bytes memory signature) public pure returns(address) {
         return ECDSA.recover(data, signature);
-    }
+    } */
 }

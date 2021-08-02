@@ -5,10 +5,9 @@ pragma solidity ^0.8.0;
 import "./PresalePublic.sol";
 
 contract PresaleFactoryPublic {
-
     LessLibrary public immutable safeLibrary;
-    //ERC20 public lessToken;
-    //PresalePublic presale;
+    /* ERC20 public lessToken;
+    PresalePublic presale; */
     address public owner;
 
     struct PresaleInfo {
@@ -22,6 +21,8 @@ contract PresaleFactoryPublic {
         uint256 _tokenAmount;
         bytes _signature;
         uint256 _timestamp;
+        uint8[4] poolPercentages;
+        uint256[5] stakingTiers;
     }
 
     struct PresalePancakeSwapInfo {
@@ -61,11 +62,8 @@ contract PresaleFactoryPublic {
     );
     event Received(address indexed from, uint256 amount);
 
-    constructor(
-        address _bscsInfoAddress
-    ) {
+    constructor(address _bscsInfoAddress) {
         safeLibrary = LessLibrary(_bscsInfoAddress);
-        //lessToken = ERC20(_bscsToken);
         owner = msg.sender;
     }
 
@@ -79,14 +77,17 @@ contract PresaleFactoryPublic {
         PresaleStringInfo calldata _stringInfo
     ) external payable returns (uint256 presaleId) {
         require(!safeLibrary.getSignUsed(_info._signature), "used sign");
+        // signature check
         require(
             safeLibrary._verifySigner(
-                keccak256(abi.encodePacked(
-                    address(_info.tokenAddress),
-                    msg.sender,
-                    _info._tokenAmount,
-                    _info._timestamp
-                )),
+                keccak256(
+                    abi.encodePacked(
+                        _info.tokenAddress,
+                        msg.sender,
+                        _info._tokenAmount,
+                        _info._timestamp
+                    )
+                ),
                 _info._signature,
                 0
             ),
@@ -97,7 +98,7 @@ contract PresaleFactoryPublic {
             _info.openTime > block.timestamp &&
                 _info.openVotingTime + safeLibrary.getVotingTime() + 86400 <=
                 _info.openTime &&
-                _info.openTime < _info.closeTime &&
+                _info.closeTime - _info.openTime > 6900 &&
                 _info.closeTime < _cakeInfo.liquidityAllocationTime,
             "timing err"
         );
@@ -105,17 +106,25 @@ contract PresaleFactoryPublic {
             _info.tokenPriceInWei > 0 &&
                 _info.softCapInWei > 0 &&
                 _info.hardCapInWei > 0 &&
-                _info.hardCapInWei >= _info.softCapInWei,
+                _info.hardCapInWei >= _info.softCapInWei &&
+                _cakeInfo.listingPriceInWei > 0 &&
+                _cakeInfo.liquidityPercentageAllocation > 0 &&
+                _cakeInfo.lpTokensLockDurationInDays > 0,
             "Wrong params"
         );
 
         ERC20 _token = ERC20(_info.tokenAddress);
 
+        // Disabled for testing
         uint256 feeEth = Calculations.usdtToEthFee(address(safeLibrary));
+        //uint256 feeEth = 50000000000000000;
         require(msg.value >= feeEth && feeEth > 0, "value<=0");
 
         // maxLiqPoolTokenAmount, maxTokensToBeSold, requiredTokenAmount
         uint256[] memory tokenAmounts = new uint256[](3);
+
+        // Disabled for testing
+
         tokenAmounts = Calculations.countAmountOfTokens(
             _info.hardCapInWei,
             _info.tokenPriceInWei,
@@ -130,7 +139,10 @@ contract PresaleFactoryPublic {
             safeLibrary.owner(),
             safeLibrary.getDev()
         );
-        _token.transferFrom(msg.sender, address(presale), tokenAmounts[2]);
+        require(
+            _token.transferFrom(msg.sender, address(presale), tokenAmounts[2]),
+            "can't get ur tkns"
+        );
         payable(address(presale)).transfer(feeEth);
         initializePresalePublic(
             presale,
@@ -146,7 +158,7 @@ contract PresaleFactoryPublic {
             false
         );
         presale.setPresaleId(presaleId);
-        safeLibrary.setSingUsed(_info._signature, address(this));
+        safeLibrary.setSingUsed(_info._signature, address(presale));
         emit PublicPresaleCreated(
             presaleId,
             msg.sender,
@@ -193,6 +205,7 @@ contract PresaleFactoryPublic {
             _stringInfo.description,
             _stringInfo.whitepaper
         );
+        _presale.setArrays(_info.poolPercentages, _info.stakingTiers);
     }
 
     function migrateTo(address payable _newFactory) external onlyDev {

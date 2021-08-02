@@ -4,13 +4,13 @@ const Calculations = artifacts.require("Calculations");
 module.exports = function (deployer) {
   return deployer.then(async () => {
     //const calc = Calculations.at("0x0E2967580BE47c5ceC6Af37B6393829300cFe22E");
-    const calc = await Calculations.at("0xCB5Fd12e05788270AEF1af72C37743C78A637f24");
+    const calc = await Calculations.at("0x34E414C5d3A4d06a36e285bea695fae1E8e448Cd");
     //const library = await LessLibrary.deployed();
     //const ritaToken = TestTokenTwo.at("0x63Adf149ac95cb7cc24254Cfad2ceD43D6b067E3");
     await PresaleFactoryPublic.link("Calculations", calc.address);
     const factory = await deployer.deploy(
         PresaleFactoryPublic,
-        "0x9cC3dc4D4D17A16628f985367e2538C61F256DDf"
+        "0x0B58bF30d19E4c6C71A6118108db810A4E68C9E6"
         //"0x076877073D287Ee8c10878B190d7166367899fdA"
     );
     console.log('Public Factory\'s address ', factory.address);

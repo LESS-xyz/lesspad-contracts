@@ -20,6 +20,8 @@ contract PresaleFactoryCertified is ReentrancyGuard {
         uint256 _tokenAmount;
         bytes _signature;
         uint256 _timestamp;
+        uint8[4] poolPercentages;
+        uint256[5] stakingTiers;
     }
 
     struct CertifiedAddition {
@@ -127,7 +129,7 @@ contract PresaleFactoryCertified is ReentrancyGuard {
                 _info.hardCapInWei >= _info.softCapInWei,
             "Wrong params"
         );
-        if(Calculations.wethReturn(address(safeLibrary)) != _addition.nativeToken) {
+        if(address(0) != _addition.nativeToken) {
             require(safeLibrary.isValidStablecoin(_addition.nativeToken), "Stablecoin is not whitelisted");
         }
 
@@ -153,7 +155,7 @@ contract PresaleFactoryCertified is ReentrancyGuard {
             safeLibrary.owner(),
             safeLibrary.getDev()
         );
-        _token.transferFrom(msg.sender, address(presale), tokenAmounts[2]);
+        require(_token.transferFrom(msg.sender, address(presale), tokenAmounts[2]), "can't get ur tkns");
         payable(address(presale)).transfer(feeEth);
         initializePresaleCertified(
             presale,
@@ -235,6 +237,7 @@ contract PresaleFactoryCertified is ReentrancyGuard {
             _stringInfo.description,
             _stringInfo.whitepaper
         );
+        _presale.setArrays(_info.poolPercentages, _info.stakingTiers);
     }
 
     function migrateTo(address payable _newFactory) external onlyDev {
