@@ -1,11 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Burnable.sol";
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "./LessLibrary.sol";
-import "./interface.sol";
 
 contract Staking is Ownable, ReentrancyGuard {
     //STRUCTURES:--------------------------------------------------------
@@ -13,8 +11,6 @@ contract Staking is Ownable, ReentrancyGuard {
         uint256 lessBalance;
         uint256 lpBalance;
         uint256 overallBalance;
-        uint256 lastStakedTimestamp;
-        uint256 lastUnstakedTimestamp;
     }
 
     struct StakeItem {
@@ -25,28 +21,28 @@ contract Staking is Ownable, ReentrancyGuard {
 
     struct UserStakes {
         uint256[] ids;
-        mapping(uint256 => uint256) indexes; 
+        mapping(uint256 => uint256) indexes;
     }
 
-    //for "Stack too deep" avoiding. Using in Unstaked event.
-    struct Unstake {
-        address staker;
-        uint256 stakeId;
-        uint256 unstakeTime;
-        bool isUnstakedEarlier;
+    struct DepositReward {
+        uint256 day;
+        uint256 lpShares;
+        uint256 lessShares;
+        uint256 lpReward;
+        uint256 lessReward;
     }
-
-
 
     //FIELDS:----------------------------------------------------
-    ERC20Burnable public lessToken;
-    ERC20Burnable public lpToken;
-    LessLibrary public safeLibrary;
+    ERC20 public lessToken;
+    ERC20 public lpToken;
 
+    uint256 public contractStart;
     uint256 public minStakeTime;
-    uint16 public penaltyDistributed = 5; //100% = PERCENT_FACTOR
-    uint16 public penaltyBurned = 5; //100% = PERCENT_FACTOR
-    uint256 constant private PERCENT_FACTOR = 1000;
+    uint256 public dayDuration;
+    uint256 public participants;
+    uint16 public penaltyDistributed = 25; //100% = PERCENT_FACTOR
+    uint16 public penaltyBurned = 25; //100% = PERCENT_FACTOR
+    uint256 private constant PERCENT_FACTOR = 1000;
     uint256 public lessPerLp = 300; //1 LP = 300 LESS
 
     uint256 public stakeIdLast;
@@ -59,21 +55,36 @@ contract Staking is Ownable, ReentrancyGuard {
     mapping(address => AccountInfo) private accountInfos;
     mapping(address => UserStakes) private userStakes;
     mapping(uint256 => StakeItem) public stakes;
+    mapping(uint256 => DepositReward) public rewardDeposits;
+    mapping(uint256 => uint256) private _dayIndexies;
+    mapping(uint256 => bool) private _firstTransactionPerDay;
 
     uint8[4] public poolPercentages;
     uint256[5] public stakingTiers;
 
+    uint256 private _todayPenaltyLp;
+    uint256 private _todayPenaltyLess;
+    uint256 private _lastDayPenalty;
+    uint256 private _lastDayIndex;
+    uint256[] private _depositDays;
+
+    /* uint256 private _reservedLp;
+    uint256 private _reservedLess; */
+
     //CONSTRUCTOR-------------------------------------------------------
     constructor(
-        ERC20Burnable _lp,
-        ERC20Burnable _less,
-        address _safeLibrary
+        ERC20 _lp,
+        ERC20 _less,
+        uint256 _dayDuration,
+        uint256 _startTime
     ) {
+        require(_dayDuration > 0 && _startTime > 0, "Error: wrong params");
         lessToken = _less;
         lpToken = _lp;
-        safeLibrary = LessLibrary(_safeLibrary);
 
-        minStakeTime = safeLibrary.getMinUnstakeTime();
+        dayDuration = _dayDuration;
+        minStakeTime = _dayDuration * 30;
+        contractStart = _startTime;
 
         poolPercentages[0] = 30; //tier 5
         poolPercentages[1] = 20; //tier 4
@@ -86,6 +97,7 @@ contract Staking is Ownable, ReentrancyGuard {
         stakingTiers[3] = 5000 ether; //tier 2
         stakingTiers[4] = 1000 ether; //tier 1
 
+        _firstTransactionPerDay[0] = true;
     }
 
     //EVENTS:-----------------------------------------------------------------
@@ -105,12 +117,9 @@ contract Staking is Ownable, ReentrancyGuard {
     );
 
     //MODIFIERS:---------------------------------------------------
-    modifier onlyDev() {
-        require(
-            msg.sender == safeLibrary.owner() ||
-            msg.sender == safeLibrary.getDev(),
-            "Only Dev"
-        );
+
+    modifier onlyWhenOpen() {
+        require(block.timestamp > contractStart, "Error: early");
         _;
     }
 
@@ -122,46 +131,50 @@ contract Staking is Ownable, ReentrancyGuard {
      * @param lessAmount Amount of staked Less tokens
      */
 
-    function stake(uint256 lpAmount, uint256 lessAmount) external nonReentrant {
+    function stake(uint256 lpAmount, uint256 lessAmount)
+        external
+        nonReentrant
+        onlyWhenOpen
+    {
+        address sender = _msgSender();
+        uint256 today = _currentDay();
+        if(participants == 0 && totalLessRewards + totalLpRewards > 0){
+            _todayPenaltyLp = totalLpRewards;
+            _todayPenaltyLess = totalLessRewards;
+            _lastDayPenalty = today;
+        }
+        _rewriteTodayVars();
         require(lpAmount > 0 || lessAmount > 0, "Error: zero staked tokens");
         if (lpAmount > 0) {
             require(
-                lpToken.transferFrom(_msgSender(), address(this), lpAmount),
+                lpToken.transferFrom(sender, address(this), lpAmount),
                 "Error: LP token tranfer failed"
             );
+            allLp += lpAmount;
         }
         if (lessAmount > 0) {
             require(
-                lessToken.transferFrom(_msgSender(), address(this), lessAmount),
+                lessToken.transferFrom(sender, address(this), lessAmount),
                 "Error: Less token tranfer failed"
             );
+            allLess += lessAmount;
         }
-        allLp += lpAmount;
-        allLess += lessAmount;
-        AccountInfo storage account = accountInfos[_msgSender()];
+
+        AccountInfo storage account = accountInfos[sender];
 
         account.lpBalance += lpAmount;
         account.lessBalance += lessAmount;
         account.overallBalance += lessAmount + getLpInLess(lpAmount);
-
-        if (account.lastUnstakedTimestamp == 0) {
-            account.lastUnstakedTimestamp = block.timestamp;
+        if (userStakes[sender].ids.length == 0) {
+            participants++;
         }
 
-        account.lastStakedTimestamp = block.timestamp;
-
-        StakeItem memory newStake = StakeItem(block.timestamp, lpAmount, lessAmount);
+        StakeItem memory newStake = StakeItem(today, lpAmount, lessAmount);
         stakes[stakeIdLast] = newStake;
-        userStakes[_msgSender()].ids.push(stakeIdLast);
-        userStakes[_msgSender()].indexes[stakeIdLast] = userStakes[_msgSender()].ids.length;
+        userStakes[sender].ids.push(stakeIdLast);
+        userStakes[sender].indexes[stakeIdLast] = userStakes[sender].ids.length;
 
-        emit Staked(
-            _msgSender(),
-            stakeIdLast++,
-            block.timestamp,
-            lpAmount,
-            lessAmount
-        );
+        emit Staked(sender, stakeIdLast++, today, lpAmount, lessAmount);
     }
 
     /**
@@ -169,7 +182,7 @@ contract Staking is Ownable, ReentrancyGuard {
      * @param _stakeId id of the unstaked pool
      */
 
-    function unstake(uint256 _stakeId) public {
+    function unstake(uint256 _stakeId) public onlyWhenOpen {
         _unstake(_stakeId, false);
     }
 
@@ -178,12 +191,12 @@ contract Staking is Ownable, ReentrancyGuard {
      * @param _stakeId id of the unstaked pool
      */
 
-    function unstakeWithoutPenalty(uint256 _stakeId) external onlyOwner {
+    function unstakeWithoutPenalty(uint256 _stakeId)
+        external
+        onlyOwner
+        onlyWhenOpen
+    {
         _unstake(_stakeId, true);
-    }
-
-    function setLibraryAddress(address _newInfo) external onlyDev {
-        safeLibrary = LessLibrary(_newInfo);
     }
 
     /**
@@ -198,8 +211,9 @@ contract Staking is Ownable, ReentrancyGuard {
      * @dev set minimum days of stake for unstake without penalty
      */
 
-    function setMinTimeToStake(uint256 _minTime) public onlyOwner {
-        minStakeTime = _minTime;
+    function setMinTimeToStake(uint256 _minTimeInDays) public onlyOwner {
+        require(_minTimeInDays > 0, "Error: zero time");
+        minStakeTime = _minTimeInDays * dayDuration;
     }
 
     /**
@@ -211,14 +225,25 @@ contract Staking is Ownable, ReentrancyGuard {
     }
 
     function setLp(address _lp) external onlyOwner {
-        lpToken = ERC20Burnable(_lp);
+        lpToken = ERC20(_lp);
     }
 
     function setLess(address _less) external onlyOwner {
-        lessToken = ERC20Burnable(_less);
+        lessToken = ERC20(_less);
     }
 
-    function setStakingTiresSums(uint256 tier1, uint256 tier2, uint256 tier3,uint256 tier4,uint256 tier5) external onlyOwner {
+    /* function setDayDuration(uint256 _timeInSec) external onlyOwner {
+        require(_timeInSec > 0, "zero time");
+        dayDuration = _timeInSec;
+    } */
+
+    function setStakingTiresSums(
+        uint256 tier1,
+        uint256 tier2,
+        uint256 tier3,
+        uint256 tier4,
+        uint256 tier5
+    ) external onlyOwner {
         stakingTiers[0] = tier5; //tier 5
         stakingTiers[1] = tier4; //tier 4
         stakingTiers[2] = tier3; //tier 3
@@ -226,8 +251,16 @@ contract Staking is Ownable, ReentrancyGuard {
         stakingTiers[4] = tier1; //tier 1
     }
 
-    function setPoolPercentages(uint8 tier2, uint8 tier3,uint8 tier4,uint8 tier5) external onlyOwner {
-        require(tier2 + tier3 + tier4 + tier5 < 100, "Percents sum should be less 100");
+    function setPoolPercentages(
+        uint8 tier2,
+        uint8 tier3,
+        uint8 tier4,
+        uint8 tier5
+    ) external onlyOwner {
+        require(
+            tier2 + tier3 + tier4 + tier5 < 100,
+            "Percents sum should be less 100"
+        );
 
         poolPercentages[0] = tier5; //tier 5
         poolPercentages[1] = tier4; //tier 4
@@ -235,55 +268,81 @@ contract Staking is Ownable, ReentrancyGuard {
         poolPercentages[3] = tier2; //tier 2
     }
 
-
+    function addRewards(uint256 lpAmount, uint256 lessAmount)
+        external
+        onlyOwner
+        nonReentrant
+    {
+        _rewriteTodayVars();
+        address sender = _msgSender();
+        require(lpAmount + lessAmount > 0, "Error: add non zero amount");
+        if (lpAmount > 0) {
+            require(
+                lpToken.transferFrom(sender, address(this), lpAmount),
+                "Error: can't get your lp tokens"
+            );
+            totalLpRewards += lpAmount;
+            _todayPenaltyLp += lpAmount;
+        }
+        if (lessAmount > 0) {
+            require(
+                lessToken.transferFrom(sender, address(this), lessAmount),
+                "Error: can't get your less tokens"
+            );
+            totalLessRewards += lessAmount;
+            _todayPenaltyLess += lessAmount;
+        }
+        _lastDayPenalty = _currentDay();
+    }
 
     //EXTERNAL AND PUBLIC READ FUNCTIONS:--------------------------------------------------
 
-    /**
-     * @dev return info about user's staking balance.
-     * @param _sender staker address
-     */
-    function getStakedInfo(address _sender)
-        public
-        view
-        returns (
-            uint256,
-            uint256,
-            uint256
-        )
-    {
-        return (
-            accountInfos[_sender].overallBalance,
-            accountInfos[_sender].lastStakedTimestamp,
-            accountInfos[_sender].lastUnstakedTimestamp
-        );
-    }
-
-    function getUserTier(address user) external view returns(uint8){
+    function getUserTier(address user) external view returns (uint8) {
         uint256 balance = accountInfos[user].overallBalance;
         for (uint8 i = 0; i < stakingTiers.length; i++) {
-            if (balance >= stakingTiers[i]) return uint8(stakingTiers.length - i);
+            if (balance >= stakingTiers[i])
+                return uint8(stakingTiers.length - i);
         }
         return 0;
     }
 
-    function getLpRewradsAmount(uint256 id) external view returns(uint256 lpRewards) {
-         (lpRewards, ) = _rewards(id);
+    function getLpRewradsAmount(uint256 id)
+        external
+        view
+        returns (uint256 lpRewards)
+    {
+        (lpRewards, ) = _rewards(id);
     }
 
-    function getLessRewradsAmount(uint256 id) external view returns(uint256 lessRewards) {
-         (,lessRewards) = _rewards(id);
+    function getLessRewradsAmount(uint256 id)
+        external
+        view
+        returns (uint256 lessRewards)
+    {
+        (, lessRewards) = _rewards(id);
     }
 
-    function getLpBalanceByAddress(address user) external view returns(uint256 lp) {
+    function getLpBalanceByAddress(address user)
+        external
+        view
+        returns (uint256 lp)
+    {
         lp = accountInfos[user].lpBalance;
     }
 
-    function getLessBalanceByAddress(address user) external view returns(uint256 less) {
+    function getLessBalanceByAddress(address user)
+        external
+        view
+        returns (uint256 less)
+    {
         less = accountInfos[user].lessBalance;
     }
 
-    function getOverallBalanceInLessByAddress(address user) external view returns(uint256 overall) {
+    function getOverallBalanceInLessByAddress(address user)
+        external
+        view
+        returns (uint256 overall)
+    {
         overall = accountInfos[user].overallBalance;
     }
 
@@ -310,25 +369,55 @@ contract Staking is Ownable, ReentrancyGuard {
         return userStakes[user].ids.length;
     }
 
-    function getUserStakeIds(address user) external view returns(uint256[] memory) {
+    function getUserStakeIds(address user)
+        external
+        view
+        returns (uint256[] memory)
+    {
         return userStakes[user].ids;
     }
 
-    function isMinTimePassed(uint256 id) external view returns(bool) {
-        return block.timestamp - stakes[id].startTime >= minStakeTime;
+    function currentDay() external view onlyWhenOpen returns (uint256) {
+        return _currentDay();
     }
 
+    function getRewardDeposits(uint256 day)
+        external
+        view
+        returns (
+            uint256,
+            uint256,
+            uint256,
+            uint256,
+            uint256[] memory
+        )
+    {
+        return (
+            rewardDeposits[day].lpShares,
+            rewardDeposits[day].lessShares,
+            rewardDeposits[day].lpReward,
+            rewardDeposits[day].lessReward,
+            _depositDays
+        );
+    }
 
+    function getTodayPenalty() external view returns (uint256, uint256) {
+        return (_todayPenaltyLp, _todayPenaltyLess);
+    }
 
     //INTERNAL AND PRIVATE FUNCTIONS-------------------------------------------------------
     function _unstake(uint256 id, bool isWithoutPenalty) internal nonReentrant {
         address staker = _msgSender();
+        uint256 today = _currentDay();
+        _rewriteTodayVars();
         require(userStakes[staker].ids.length > 0, "Error: you haven't stakes");
+        require(userStakes[staker].indexes[id] != 0, "Not ur stake");
 
-        bool isUnstakedEarlier = (block.timestamp - stakes[id].startTime) < minStakeTime;
+        bool isUnstakedEarlier = (today - stakes[id].startTime) * dayDuration <
+            minStakeTime;
 
-        uint256 lpRewards = 0;
-        uint256 lessRewards = 0;
+        uint256 lpRewards;
+        uint256 lessRewards;
         if (!isUnstakedEarlier) (lpRewards, lessRewards) = _rewards(id);
 
         uint256 lpAmount = stakes[id].stakedLp;
@@ -341,57 +430,48 @@ contract Staking is Ownable, ReentrancyGuard {
         account.lpBalance -= lpAmount;
         account.lessBalance -= lessAmount;
         account.overallBalance -= lessAmount + getLpInLess(lpAmount);
-        account.lastStakedTimestamp = block.timestamp;
-
-        if (account.overallBalance == 0) {
-            account.lastUnstakedTimestamp = 0;
-            account.lastStakedTimestamp = 0;
-        }
-
-        
-
-        
+        //account.lastStakedTimestamp = block.timestamp;
 
         if (isUnstakedEarlier && !isWithoutPenalty) {
             (lpAmount, lessAmount) = payPenalty(lpAmount, lessAmount);
+            (uint256 freeLp, uint256 freeLess) = _rewards(id);
+            if (freeLp > 0) _todayPenaltyLp += freeLp;
+            if (freeLess > 0) _todayPenaltyLess += freeLess;
+            _lastDayPenalty = today;
         }
 
-        require(
-            lpToken.transfer(staker, lpAmount + lpRewards),
-            "Error: LP transfer failed"
-        );
-        require(
-            lessToken.transfer(staker, lessAmount + lessRewards),
-            "Error: Less transfer failed"
-        );
+        if (lpAmount + lpRewards > 0) {
+            require(
+                lpToken.transfer(staker, lpAmount + lpRewards),
+                "Error: LP transfer failed"
+            );
+        }
+        if (lessAmount + lessRewards > 0) {
+            require(
+                lessToken.transfer(staker, lessAmount + lessRewards),
+                "Error: Less transfer failed"
+            );
+        }
 
         totalLessRewards -= lessRewards;
         totalLpRewards -= lpRewards;
+        if (userStakes[staker].ids.length == 1) {
+            participants--;
+        }
 
-       
         removeStake(staker, id);
 
-        emit Unstaked(
-            staker,
-            id,
-            block.timestamp,
-            isUnstakedEarlier
-        );
+        emit Unstaked(staker, id, today, isUnstakedEarlier);
     }
 
-    function payPenalty(uint256 lpAmount, uint256 lessAmount) private returns(uint256, uint256) {
-       uint256 lpToBurn =
-            (lpAmount * penaltyBurned) /
-            PERCENT_FACTOR;
-        uint256 lessToBurn =
-            (lessAmount * penaltyBurned) /
-            PERCENT_FACTOR;
-        uint256 lpToDist =
-            (lpAmount * penaltyDistributed) /
-            PERCENT_FACTOR;
-        uint256 lessToDist =
-            (lessAmount * penaltyDistributed) /
-            PERCENT_FACTOR;
+    function payPenalty(uint256 lpAmount, uint256 lessAmount)
+        private
+        returns (uint256, uint256)
+    {
+        uint256 lpToBurn = (lpAmount * penaltyBurned) / PERCENT_FACTOR;
+        uint256 lessToBurn = (lessAmount * penaltyBurned) / PERCENT_FACTOR;
+        uint256 lpToDist = (lpAmount * penaltyDistributed) / PERCENT_FACTOR;
+        uint256 lessToDist = (lessAmount * penaltyDistributed) / PERCENT_FACTOR;
 
         burnPenalty(lpToBurn, lessToBurn);
         distributePenalty(lpToDist, lessToDist);
@@ -409,13 +489,46 @@ contract Staking is Ownable, ReentrancyGuard {
     {
         StakeItem storage deposit = stakes[id];
 
-        lpRewards =
-            (deposit.stakedLp * totalLpRewards) /
-            allLp;
+        //uint256 countStartDay = deposit.startTime;
+        uint256 countStartIndex;
+        uint256 countEndIndex = _depositDays.length;
 
-        lessRewards =
-            (deposit.stakedLess * totalLessRewards) /
-            allLess;
+        uint256 i;
+        for (i = 0; i < _depositDays.length; i++) {
+            if (deposit.startTime <= _depositDays[i]) {
+                countStartIndex = i;
+                break;
+            }
+        }
+        if (countStartIndex == 0 && i == _depositDays.length) {
+            return (0, 0);
+        }
+        uint256 curDay;
+        for (i = countStartIndex; i < countEndIndex; i++) {
+            curDay = _dayIndexies[i];
+            if (rewardDeposits[curDay].lpShares > 0) {
+                lpRewards +=
+                    (deposit.stakedLp * rewardDeposits[curDay].lpReward) /
+                    rewardDeposits[curDay].lpShares;
+            }
+            if (rewardDeposits[curDay].lessShares > 0) {
+                lessRewards +=
+                    (deposit.stakedLess * rewardDeposits[curDay].lessReward) /
+                    rewardDeposits[curDay].lessShares;
+            }
+        }
+
+        /* if(allLp > 0) {
+            lpRewards =
+                (deposit.stakedLp * totalLpRewards) /
+                allLp;
+        }
+
+        if(allLess > 0){
+            lessRewards =
+                (deposit.stakedLess * totalLessRewards) /
+                allLess;
+        } */
 
         return (lpRewards, lessRewards);
     }
@@ -427,8 +540,11 @@ contract Staking is Ownable, ReentrancyGuard {
      */
 
     function distributePenalty(uint256 lp, uint256 less) internal {
-        totalLessRewards += less;
+        _todayPenaltyLess += less;
+        _todayPenaltyLp += lp;
+        _lastDayPenalty = _currentDay();
         totalLpRewards += lp;
+        totalLessRewards += less;
     }
 
     /**
@@ -439,10 +555,10 @@ contract Staking is Ownable, ReentrancyGuard {
 
     function burnPenalty(uint256 lp, uint256 less) internal {
         if (lp > 0) {
-            lpToken.transfer(owner(), lp);
+            require(lpToken.transfer(owner(), lp), "con't get ur tkns");
         }
         if (less > 0) {
-            lessToken.transfer(owner(), less);
+            require(lessToken.transfer(owner(), less), "cont get ur tkns");
         }
     }
 
@@ -455,16 +571,45 @@ contract Staking is Ownable, ReentrancyGuard {
     function removeStake(address staker, uint256 id) internal {
         delete stakes[id];
 
-        require(userStakes[staker].ids.length != 0, "Error: whitelist is empty");
-        
+        require(
+            userStakes[staker].ids.length != 0,
+            "Error: whitelist is empty"
+        );
+
         if (userStakes[staker].ids.length > 1) {
             uint256 stakeIndex = userStakes[staker].indexes[id] - 1;
             uint256 lastIndex = userStakes[staker].ids.length - 1;
             uint256 lastStake = userStakes[staker].ids[lastIndex];
             userStakes[staker].ids[stakeIndex] = lastStake;
-            userStakes[staker].indexes[id] = stakeIndex + 1;
+            userStakes[staker].indexes[lastStake] = stakeIndex + 1;
         }
         userStakes[staker].ids.pop();
         userStakes[staker].indexes[id] = 0;
+    }
+
+    function _currentDay() private view returns (uint256) {
+        return (block.timestamp - contractStart) / dayDuration;
+    }
+
+    function _rewriteTodayVars() private {
+        uint256 today = _currentDay();
+        if (
+            !_firstTransactionPerDay[today] &&
+            _todayPenaltyLess + _todayPenaltyLp > 0 &&
+            participants > 0
+        ) {
+            rewardDeposits[_lastDayPenalty] = DepositReward(
+                _lastDayPenalty,
+                allLp,
+                allLess,
+                _todayPenaltyLp,
+                _todayPenaltyLess
+            );
+            _todayPenaltyLp = 0;
+            _todayPenaltyLess = 0;
+            _depositDays.push(_lastDayPenalty);
+            _dayIndexies[_depositDays.length - 1] = _lastDayPenalty;
+            _firstTransactionPerDay[today] = true;
+        }
     }
 }
