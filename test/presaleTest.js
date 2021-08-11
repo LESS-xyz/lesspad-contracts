@@ -2,15 +2,12 @@ const { expect } = require('chai');
 const { BN, expectEvent, expectRevert, makeInterfaceId, time } = require('@openzeppelin/test-helpers');
 const { web3 } = require('@openzeppelin/test-helpers/src/setup');
 const { inTransaction } = require('@openzeppelin/test-helpers/src/expectEvent');
-//const { exitCode } = require('process');
 const ERC20 = artifacts.require("ERC20");
-//const TestToken = artifacts.require('TestToken');
+const TestToken = artifacts.require("TestToken");
 const TestTokenTwo = artifacts.require('TestTokenTwo');
 const LessLibrary = artifacts.require('LessLibrary');
 const PresaleFactoryCertified = artifacts.require('PresaleFactoryCertified');
 const PresaleCertified = artifacts.require('PresaleCertified');
-//const PresalePublic = artifacts.require('PresalePublic');
-//const Staking = artifacts.require('Staking');
 //pancake artifacts
 const WETH = artifacts.require('WETH');
 let wethInst;
@@ -20,7 +17,6 @@ const PancakeRouter = artifacts.require('PancakeRouter');
 let pancakeRouterInstant;
 const PancakePair = artifacts.require('PancakePair');
 let pancakePairInstant;
-//let pancakePairInst = [];*/
 
 const MINUS_ONE = new BN(-1);
 const ZERO = new BN(0);
@@ -73,7 +69,8 @@ contract (
         account_one,
         account_two,
         account_three,
-        account_four
+        account_four,
+        account_five
     ]) => {
         before(async function () {
             // Advance to the next block to correctly read time in the solidity "now" function interpreted by ganache
@@ -81,13 +78,13 @@ contract (
         });
 
         //contracts
-        let library, staking, factory, ritaToken;
+        let library, factory, ritaToken, usdc, usdcPair;
 
         beforeEach(async()=>{
-            //lessToken = await TestToken.deployed();
+            usdc = await TestToken.deployed();
             ritaToken = await TestTokenTwo.deployed();
+
             library = await LessLibrary.deployed();
-            //staking = await Staking.deployed();
             factory = await PresaleFactoryCertified.deployed();
             wethInst = await WETH.new(
                 { from: deployer }
@@ -103,9 +100,13 @@ contract (
                 wethInst.address,
                 { from: deployer }
             );
+
+            await usdc.approve(pancakeRouterInstant.address, ONE_THOUSAND_TOKENS, {from: deployer});
+            usdcPair = await pancakeRouterInstant.addLiquidityETH(usdc.address, ONE_THOUSAND_TOKENS, ZERO , ZERO, deployer, await time.latest(), {from: deployer, value: ONE_TOKEN.mul(TEN)});
             library.setUniswapRouter(pancakeRouterInstant.address);
             library.setFactoryAddress(factory.address, 1);
             library.addOrRemoveSigner(signer, "true");
+            library.addOrRemoveStaiblecoin(usdc.address, true);
         })
 
         /*it("Approve", async()=> {
@@ -171,7 +172,7 @@ contract (
             console.log("DATA: ", data);
         }) */
 
-        it('should create presale', async()=> {
+        /* it('should create presale', async()=> {
             let info = require("./presalePublicInfo.json");
             let liquidityInfo = require("./presalePublicLiq.json");
             let stringInfo = require("./PresalePublicString.json");
@@ -203,26 +204,26 @@ contract (
             let genInfo = await presale.generalInfo.call();
             console.log("GEN INFO TOK LEFT: ",genInfo.tokensForSaleLeft.toString());
             //await presale.approvePresale({from: deployer});
-            await expectRevert(presale.register(FIVE_TOKENS.mul(ONE_THOUSAND), FOUR, timeForSign, signature.signature, {from: account_two}), "Not registration time");
+            await expectRevert(presale.register(FIVE_TOKENS.mul(ONE_THOUSAND), FOUR, timeForSign, signature.signature, {from: account_two}), "N.REG");
             await time.increase(time.duration.days(4));
-            await expectRevert(presale.register(FIVE_TOKENS.mul(ONE_THOUSAND), FOUR, timeForSign, signature.signature, {from: account_two}), "Presale is not approved");
+            await expectRevert(presale.register(FIVE_TOKENS.mul(ONE_THOUSAND), FOUR, timeForSign, signature.signature, {from: account_two}), "W.PARAMS");
             await presale.approvePresale({from: deployer});
-            await expectRevert(presale.register(ONE_TOKEN, ZERO, timeForSign, signature.signature), "wr tier");
+            await expectRevert(presale.register(ONE_TOKEN, ZERO, timeForSign, signature.signature), "W.PARAMS");
             await presale.register(FIVE_TOKENS.mul(ONE_THOUSAND), TWO, timeForSign, signature.signature, {from: account_two});
             genInfo = await presale.generalInfo.call();
             console.log("GEN INFO TOK LEFT: ",genInfo.tokensForSaleLeft.toString());
             await presale.register(FIVE_TOKENS.mul(TEN).mul(ONE_THOUSAND), FOUR, timeForSign, signature.signature, {from: account_three});
             genInfo = await presale.generalInfo.call();
             console.log("GEN INFO TOK LEFT: ",genInfo.tokensForSaleLeft.toString());
-            await expectRevert(presale.register(ONE_THOUSAND_TOKENS, FOUR, timeForSign, signature.signature, {from: account_three}), "al. whitelisted");
-            await expectRevert(presale.register(ONE_THOUSAND_TOKENS, FOUR, timeForSign, signature.signature, {from: account_one}), "No permition");
+            await expectRevert(presale.register(ONE_THOUSAND_TOKENS, FOUR, timeForSign, signature.signature, {from: account_three}), "W.PARAMS");
+            await expectRevert(presale.register(ONE_THOUSAND_TOKENS, FOUR, timeForSign, signature.signature, {from: account_one}), "W.PARAMS");
             await time.increase(time.duration.days(1));
-            await expectRevert(presale.invest(ZERO,signature.signature, TIER5,timeForSign, {from: account_four}), "not in whitelist");
+            await expectRevert(presale.invest(ZERO,signature.signature, TIER5,timeForSign, {from: account_four}), "SIGN/REG");
             await expectRevert(presale.invest(ZERO, signature.signature, TIER4, timeForSign,  {from: account_three}), "can't invest zero");
             console.log(info.openTime, (await time.latest()).toString());
-            await expectRevert(presale.invest(ZERO, signature.signature, TIER4, timeForSign,  {from: account_three, value: ONE_TOKEN.div(ONE_HUNDRED)}), "u cant vote");
+            await expectRevert(presale.invest(ZERO, signature.signature, TIER4, timeForSign,  {from: account_three, value: ONE_TOKEN.div(ONE_HUNDRED)}), "TIER 5");
             await time.increase(time.duration.minutes(61));
-            await expectRevert(presale.invest(ZERO, signature.signature, TIER4, timeForSign,  {from: account_three, value: TWO_TOKEN}), "Not enough tokens in pool");
+            await expectRevert(presale.invest(ZERO, signature.signature, TIER4, timeForSign,  {from: account_three, value: TWO_TOKEN}), "(N)ENOUGH");
             let ethBalanceTwoBefore = await web3.eth.getBalance(account_two);
             let ethBalanceThreeBefore = await web3.eth.getBalance(account_three);
             console.log(ethBalanceThreeBefore.toString());
@@ -235,9 +236,9 @@ contract (
             let investmentThree = await presale.investments.call(account_three);
             console.log(investmentThree.amountEth.toString(), investmentThree.amountTokens.toString());
             await time.increase(time.duration.minutes(31));
-            await expectRevert(presale.invest(ZERO, signature.signature, TIER2, timeForSign,  {from: account_two, value: ONE_TOKEN.div(ONE_HUNDRED)}), "u cant vote");
+            await expectRevert(presale.invest(ZERO, signature.signature, TIER2, timeForSign,  {from: account_two, value: ONE_TOKEN.div(ONE_HUNDRED)}), "TIER 3");
             await time.increase(time.duration.minutes(15));
-            await expectRevert(presale.invest(ZERO, signature.signature, TIER2, timeForSign,  {from: account_two, value: ONE_TOKEN.mul(FOUR)}), "Not enough tokens in pool");
+            await expectRevert(presale.invest(ZERO, signature.signature, TIER2, timeForSign,  {from: account_two, value: ONE_TOKEN.mul(FOUR)}), "(N)ENOUGH");
             await presale.invest(ZERO, signature.signature, TIER2, timeForSign,  {from: account_two, value: ONE_TOKEN.div(ONE_HUNDRED)});
             let ethBalanceTwoAfter = await web3.eth.getBalance(account_two);
             //expect(ethBalanceTwoBefore.sub(ethBalanceTwoAfter)).bignumber.equal(ONE_TOKEN.div(ONE_HUNDRED));
@@ -245,14 +246,14 @@ contract (
             console.log("GEN INFO TOK LEFT: ",genInfo.tokensForSaleLeft.toString());
             let investmentTwo = await presale.investments.call(account_two);
             console.log(investmentTwo.amountEth.toString(), investmentTwo.amountTokens.toString());
-            await expectRevert(presale.invest(ZERO, signature.signature, TIER4, timeForSign,  {from: account_three, value: ONE_TOKEN.div(ONE_HUNDRED)}), "u cant vote");
+            //await expectRevert(presale.invest(ZERO, signature.signature, TIER4, timeForSign,  {from: account_three, value: ONE_TOKEN.div(ONE_HUNDRED)}), "u cant vote");
             await time.increase(time.duration.minutes(11));
             await presale.invest(ZERO, signature.signature, TIER4, timeForSign,  {from: account_three, value: ONE_TOKEN});
             investmentThree = await presale.investments.call(account_three);
             console.log(investmentThree.amountEth.toString(), investmentThree.amountTokens.toString());
             inter = await presale.intermediate.call();
             console.log("RAISED AMOUNT: ",inter.raisedAmount.toString());
-            await expectRevert(presale.withdrawInvestment(account_three, TWO_TOKEN, {from: account_three}), "not enough amt");
+            await expectRevert(presale.withdrawInvestment(account_three, TWO_TOKEN, {from: account_three}), "W.PARAMS");
             await presale.withdrawInvestment(account_three, ONE_HALF_TOKEN,  {from: account_three});
             investmentThree = await presale.investments.call(account_three);
             console.log(investmentThree.amountEth.toString(), investmentThree.amountTokens.toString());
@@ -267,16 +268,16 @@ contract (
             await presale.invest(ZERO, signature.signature, TIER4, timeForSign,  {from: account_three, value: TWO_TOKEN});
             inter = await presale.intermediate.call();
             console.log("RAISED AMOUNT: ",inter.raisedAmount.toString());
-            await expectRevert(presale.withdrawInvestment(account_three, ONE_HALF_TOKEN,  {from: account_three}), "afterCap withdraw");
-            await expectRevert(presale.claimTokens({from: account_two}), "wrong time/params");
+            await expectRevert(presale.withdrawInvestment(account_three, ONE_HALF_TOKEN,  {from: account_three}), "AFTERCAP");
+            await expectRevert(presale.claimTokens({from: account_two}), "W.PARAMS");
             await time.increase(time.duration.days(5));
-            await expectRevert(presale.addLiquidity({from: account_one}), "Liquidity not provided");
+            await expectRevert(presale.addLiquidity({from: account_one}), "W.PARAMS");
             const ritaBalTwo = await ritaToken.balanceOf(account_two);
             await presale.claimTokens({from: account_two});
             const ritaBalTwoafter = await ritaToken.balanceOf(account_two);
             expect(ritaBalTwoafter.sub(ritaBalTwo)).bignumber.equal(ONE_TOKEN);
-            await expectRevert(presale.claimTokens({from: account_four}), "wrong time/params");
-            await expectRevert(presale.claimTokens({from: account_two}), "wrong time/params");
+            await expectRevert(presale.claimTokens({from: account_four}), "W.PARAMS");
+            await expectRevert(presale.claimTokens({from: account_two}), "W.PARAMS");
             const ritaBalTree = await ritaToken.balanceOf(account_three);
             await presale.claimTokens({from:account_three});
             const ritaBalTreeafetr = await ritaToken.balanceOf(account_three);
@@ -290,34 +291,306 @@ contract (
             console.log("BEFORE: ", creatorBalOne, "AFTER: ", creatorBalTwo);
             ritaBalPres = await ritaToken.balanceOf(presale.address);
             expect(ritaBalPres).bignumber.equal(ZERO);
-            /* await expectRevert(presale.addLiquidity({from: account_one}), "Liquidity not provided");
-            await expectRevert(presale.collectFundsRaised({from: account_one}), "sCap n riched");
-            const ritaOne = await ritaToken.balanceOf(account_one);
-            //await expectRevert(presale.cancelPresale({from: account_one}), "only platf own");
-            await presale.cancelPresale({from: account_one});
-            await presale.withdrawInvestment(account_three, investmentThree.amountEth,  {from: account_three});
-            investmentTwo = await presale.investments.call(account_two);
-            await presale.withdrawInvestment(account_two, investmentTwo.amountEth,  {from: account_two});
-            const ritaTwo = await ritaToken.balanceOf(account_one);
-            expect(ritaTwo.sub(ritaOne)).bignumber.equal(inter.beginingAmount); */
-            //console.log(vault, await library.getVaultAddress());
-            /* let ticketOne = await presale.tickets.call(ZERO);
-            console.log(ticketOne.user, ticketOne.ticketAmount.toString());
-            console.log(await presale.tickets.call(ONE)); */
-            //console.log(await pancakeRouterInstant.WETH());
-            //let encoded1 = web3.eth.abi.encodeParameters(['address', 'address', 'uint256', 'uint256'], [info.tokenAddress, account_one, '0' , '1627549958']);
-            //console.log(encoded);
-            //let data2 = web3.utils.soliditySha3(info.tokenAddress, account_one, '0' , '1627549958');
-            //let data2 = await library.encoder(info.tokenAddress, account_one, '0' , '1627549958');
-            //console.log(data);
-            /* console.log("DATA2; ", data2);
-            let signature = await web3.eth.accounts.sign(data2, "8d5fd3150e7d4fb26ab1439bad4d8027d912e90471dfbab871062ee64caee7be");
-            console.log("SIGN: ", signature); */
-            //console.log("FIRST ", web3.utils.soliditySha3('rita'));
-            //console.log("SECOND ", await library.decoder(data, signature));
-            /* const receipt = await library._verifySigner(signature.messageHash, signature.signature, 1);
-            console.log(receipt); */
+        }) */
+
+        it("presale in stablecoins", async()=>{
+            let info = require("./presalePublicInfo.json");
+            let liquidityInfo = require("./presalePublicLiq.json");
+            let stringInfo = require("./PresalePublicString.json");
+            let additionalInfo = require("./presaleCertifiedAddition.json");
+            info.tokenAddress = ritaToken.address;
+            let nowTime = await time.latest();
+            console.log(nowTime.toString());
+            info.openTime = nowTime.add(DAY.mul(FIVE));
+            info.closeTime = info.openTime.add(DAY.mul(FIVE));
+            liquidityInfo.liquidityAllocationTime = info.closeTime.add(DAY);
+            info.openTime = info.openTime.toString();
+            info.closeTime = info.closeTime.toString();
+            liquidityInfo.liquidityAllocationTime = liquidityInfo.liquidityAllocationTime.toString();
+            additionalInfo.nativeToken = usdc.address;
+            let timeForSign = await time.latest();
+            info._tokenAmount = "0";
+            info._timestamp = timeForSign.toString();
+            let data = web3.utils.soliditySha3(info.tokenAddress, account_one, '0' , info._timestamp);
+            let signature = await web3.eth.accounts.sign(data, "0x8d5fd3150e7d4fb26ab1439bad4d8027d912e90471dfbab871062ee64caee7be");
+            info._signature = signature.signature.toString();
+            //additionalInfo.nativeToken = ZERO_ADDRESS;
+            console.log("INFO: ", info, "\nADDITIONAL: ",additionalInfo, "\nLIQUIDITY: ", liquidityInfo,  "\nSTRING INFO: ", stringInfo);
+            await ritaToken.approve(factory.address, ONE_THOUSAND_TOKENS.mul(ONE_HUNDRED), {from:account_one});
+            await ritaToken.mint(account_one, ONE_THOUSAND_TOKENS.mul(ONE_HUNDRED), {from:account_one});
+            console.log((await ritaToken.balanceOf(account_one)).toString());
+            //await expectRevert(factory.createPresaleCertified(info, additionalInfo, liquidityInfo, stringInfo, {from: account_one, value: new BN("50000000000000000")}), "Wrong liq param");
+            const receipt = await factory.createPresaleCertified(info, additionalInfo, liquidityInfo, stringInfo, {from: account_one, value: new BN("50000000000000000")});
+            console.log(receipt);
+            const presaleAddress = await library.getPresaleAddress(ZERO);
+            const presale = await PresaleCertified.at(presaleAddress);
+
+            //mint//approve
+
+            await usdc.mint(account_two, ONE_HUNDRED_TOKENS);
+            await usdc.mint(account_three, ONE_HUNDRED_TOKENS);
+            await usdc.mint(account_four, ONE_HUNDRED_TOKENS);
+            await usdc.mint(account_five, ONE_HUNDRED_TOKENS);
+            await usdc.approve(presale.address, ONE_HUNDRED_TOKENS, {from: account_two});
+            await usdc.approve(presale.address, ONE_HUNDRED_TOKENS, {from: account_three});
+            await usdc.approve(presale.address, ONE_HUNDRED_TOKENS, {from: account_four});
+            await usdc.approve(presale.address, ONE_HUNDRED_TOKENS, {from: account_five});
+
+            //try to register
+            await expectRevert(presale.register(ZERO, FOUR, timeForSign, signature.signature, {from: account_two}), "N.REG");
+            await time.increase(time.duration.days(4));
+            await expectRevert(presale.register(ZERO, FOUR, timeForSign, signature.signature, {from: account_two}), "W.PARAMS");
+            await presale.approvePresale({from: deployer});
+            await presale.register(ZERO, TWO, timeForSign, signature.signature, {from: account_two});
+            await presale.register(ZERO, FOUR, timeForSign, signature.signature, {from: account_four});
+            await presale.register(ZERO, FIVE, timeForSign, signature.signature, {from: account_five});
+            await expectRevert(presale.register(ZERO, FIVE, timeForSign, signature.signature, {from: account_five}), "W.PARAMS");
+
+            //try to invest
+            const genInfo = await presale.generalInfo.call();
+            const collectedFee = genInfo[9];
+            console.log("COLLECTED FEE : ", collectedFee.toString());
+            await expectRevert(presale.invest(ZERO, signature.signature, TIER2, timeForSign, {from: account_two}), "N.OPEN");
+            
+            await time.increase(time.duration.days(1));
+            const addit = await presale.certifiedAddition.call();
+            console.log(addit, usdc.address);
+            await expectRevert(presale.invest(ZERO, signature.signature, TIER2, timeForSign, {from: account_two, value: new BN("1000000000")}), "can't invest zero");
+            await expectRevert(presale.invest(ONE_TOKEN, signature.signature, TIER4, timeForSign, {from: account_three}), "SIGN/REG");
+            await expectRevert(presale.invest(TEN.mul(ONE_TOKEN), signature.signature, TIER5, timeForSign, {from: account_five}), "(N)ENOUGH");
+            await presale.invest(ONE_HALF_TOKEN, signature.signature, TIER5, timeForSign, {from: account_five});
+            expect(await usdc.balanceOf(presale.address)).bignumber.equal(ONE_HALF_TOKEN);
+            await expectRevert(presale.invest(ONE_TOKEN, signature.signature, TIER4, timeForSign, {from: account_four}), "TIER 5");
+            await time.increase(time.duration.minutes(60));
+            await presale.invest(ONE_TOKEN, signature.signature, TIER4, timeForSign, {from: account_four});
+            expect(await usdc.balanceOf(presale.address)).bignumber.equal(ONE_HALF_TOKEN.add(ONE_TOKEN));
+            await expectRevert(presale.invest(ONE_TOKEN, signature.signature, TIER2, timeForSign, {from: account_two}), "TIER 4");
+            await time.increase(time.duration.minutes(30));
+            await expectRevert(presale.invest(ONE_TOKEN, signature.signature, TIER2, timeForSign, {from: account_two}), "TIER 3");
+            await time.increase(time.duration.minutes(15));
+            await presale.invest(ONE_TOKEN, signature.signature, TIER2, timeForSign, {from: account_two});
+            expect(await usdc.balanceOf(presale.address)).bignumber.equal(ONE_HALF_TOKEN.add(TWO_TOKEN));
+            //expect(await web3.eth.getBalance(presale.address)).bignumber.equal(ONE_TOKEN.add(collectedFee));
+            let investThree = await presale.investments.call(account_two);
+            expect(investThree[0]).bignumber.equal(ONE_TOKEN);
+            expect(investThree[1]).bignumber.equal(ONE_HUNDRED_TOKENS);
+            investThree = await presale.investments.call(account_four);
+            expect(investThree[0]).bignumber.equal(ONE_TOKEN);
+            expect(investThree[1]).bignumber.equal(ONE_HUNDRED_TOKENS);
+            investThree = await presale.investments.call(account_five);
+            expect(investThree[0]).bignumber.equal(ONE_HALF_TOKEN);
+            expect(investThree[1]).bignumber.equal(ONE_TOKEN.mul(TEN).mul(FIVE));
+
+            await expectRevert(presale.collectFee({from: account_two}), "OWNERS");
+            const balBefore = await web3.eth.getBalance(deployer);
+            console.log("BEFORE FEE: ",balBefore)
+            await presale.collectFee({from: account_one});
+            const balAfet = await web3.eth.getBalance(deployer);
+            console.log("AFTER FEE: ", balAfet);
+            //expect(balAfet.sub(balBefore)).bignumber.equal(collectedFee);
+            
+            //claim tokens
+            await expectRevert(presale.withdrawInvestment(account_two, ONE_HALF_TOKEN, {from: account_two}), "AFTERCAP");
+            await expectRevert(presale.claimTokens({from:account_two}), "W.PARAMS");
+            await time.increase(time.duration.days(5));
+            await expectRevert(presale.withdrawInvestment(account_two, ONE_HALF_TOKEN, {from: account_two}), "AFTERCAP");
+            expect(await ritaToken.balanceOf(account_two)).bignumber.equal(ZERO);
+            await presale.claimTokens({from: account_two});
+            expect(await ritaToken.balanceOf(account_two)).bignumber.equal(ONE_HUNDRED_TOKENS);
+            await expectRevert(presale.claimTokens({from: account_three}), "W.PARAMS");
+            expect(await ritaToken.balanceOf(account_four)).bignumber.equal(ZERO);
+            await presale.claimTokens({from: account_four});
+            expect(await ritaToken.balanceOf(account_four)).bignumber.equal(ONE_HUNDRED_TOKENS);
+            expect(await ritaToken.balanceOf(account_five)).bignumber.equal(ZERO);
+            await presale.claimTokens({from: account_five});
+            expect(await ritaToken.balanceOf(account_five)).bignumber.equal(ONE_HUNDRED_TOKENS.div(TWO));
+            await expectRevert(presale.collectFee({from: deployer}), "WITHDRAWN");
+            //const usdcBalanceBefore = await usdc.balanceOf(account_one);
+            expect(await usdc.balanceOf(account_one)).bignumber.equal(ZERO);
+            await presale.collectFundsRaised({from: account_one});
+            expect(await usdc.balanceOf(account_one)).bignumber.equal(TWO_TOKEN.add(ONE_HALF_TOKEN));
+            await expectRevert(presale.collectFundsRaised({from:account_one}), "ONCE");
         })
+
+        /* it("private presale + vesting", async ()=>{
+            let info = require("./presalePublicInfo.json");
+            let liquidityInfo = require("./presalePublicLiq.json");
+            let stringInfo = require("./PresalePublicString.json");
+            let additionalInfo = require("./presaleCertifiedAddition.json");
+            info.tokenAddress = ritaToken.address;
+            let nowTime = await time.latest();
+            console.log(nowTime.toString());
+            info.openTime = nowTime.add(DAY.mul(FIVE));
+            info.closeTime = info.openTime.add(DAY.mul(FIVE));
+            liquidityInfo.liquidityAllocationTime = info.closeTime.add(DAY);
+            info.openTime = info.openTime.toString();
+            info.closeTime = info.closeTime.toString();
+            liquidityInfo.liquidityAllocationTime = liquidityInfo.liquidityAllocationTime.toString();
+            let timeForSign = await time.latest();
+            info._tokenAmount = "0";
+            info._timestamp = timeForSign.toString();
+            let data = web3.utils.soliditySha3(info.tokenAddress, account_one, '0' , info._timestamp);
+            let signature = await web3.eth.accounts.sign(data, "0x8d5fd3150e7d4fb26ab1439bad4d8027d912e90471dfbab871062ee64caee7be");
+            info._signature = signature.signature.toString();
+            additionalInfo.nativeToken = ZERO_ADDRESS;
+            console.log("INFO: ", info, "\nADDITIONAL: ",additionalInfo, "\nLIQUIDITY: ", liquidityInfo,  "\nSTRING INFO: ", stringInfo);
+            await ritaToken.approve(factory.address, ONE_THOUSAND_TOKENS.mul(ONE_HUNDRED), {from:account_one});
+            await ritaToken.mint(account_one, ONE_THOUSAND_TOKENS.mul(ONE_HUNDRED), {from:account_one});
+            console.log((await ritaToken.balanceOf(account_one)).toString());
+            //await expectRevert(factory.createPresaleCertified(info, additionalInfo, liquidityInfo, stringInfo, {from: account_one, value: new BN("50000000000000000")}), "Wrong liq param");
+            const receipt = await factory.createPresaleCertified(info, additionalInfo, liquidityInfo, stringInfo, {from: account_one, value: new BN("50000000000000000")});
+            console.log(receipt);
+            const presaleAddress = await library.getPresaleAddress(ZERO);
+            const presale = await PresaleCertified.at(presaleAddress);
+
+            //try to register
+            await expectRevert(presale.register(ZERO, FOUR, timeForSign, signature.signature, {from: account_two}), "N.REG");
+            await time.increase(time.duration.days(4));
+            await expectRevert(presale.register(ZERO, FOUR, timeForSign, signature.signature, {from: account_two}), "W.PARAMS");
+            await presale.approvePresale({from: deployer});
+            await expectRevert(presale.register(ZERO, FOUR, timeForSign, signature.signature, {from: account_two}), "W.PARAMS");
+
+            //try to invest
+            const genInfo = await presale.generalInfo.call();
+            const collectedFee = genInfo[9];
+            console.log("COLLECTED FEE : ", collectedFee.toString());
+            await expectRevert(presale.invest(ZERO, signature.signature, TIER2, timeForSign, {from: account_two}), "N.OPEN");
+
+            await time.increase(time.duration.days(1));
+            await expectRevert(presale.invest(ZERO, signature.signature, TIER2, timeForSign, {from: account_two, value: new BN("10000000000000000")}), "TIER4/5");
+            await presale.invest(TIER1, signature.signature, TIER4, timeForSign, {from: account_three, value: ONE_TOKEN});
+            expect(await web3.eth.getBalance(presale.address)).bignumber.equal(ONE_TOKEN.add(collectedFee));
+            let investThree = await presale.investments.call(account_three);
+            expect(investThree[0]).bignumber.equal(ONE_TOKEN);
+            expect(investThree[1]).bignumber.equal(ONE_HUNDRED_TOKENS);
+
+            await time.increase(time.duration.days(1));
+            await presale.invest(ZERO, signature.signature, TIER4, timeForSign, {from: account_four, value: ONE_TOKEN});
+            let investFour = await presale.investments.call(account_four);
+            expect(investFour[0]).bignumber.equal(ONE_TOKEN);
+            expect(investFour[1]).bignumber.equal(ONE_HUNDRED_TOKENS);
+            expect(await web3.eth.getBalance(presale.address)).bignumber.equal(ONE_TOKEN.mul(TWO).add(collectedFee));
+
+            await time.increase(time.duration.days(1));
+            await expectRevert(presale.invest(ZERO, signature.signature, TIER5, timeForSign, {from: account_five, value: THREE_TOKENS}), "(N)ENOUGH");
+            await presale.invest(ZERO, signature.signature, TIER5, timeForSign, {from: account_five, value: TWO_TOKEN});
+            let investFive = await presale.investments.call(account_five);
+            expect(investFive[0]).bignumber.equal(TWO_TOKEN);
+            expect(investFive[1]).bignumber.equal(ONE_HUNDRED_TOKENS.mul(TWO));
+            expect(await web3.eth.getBalance(presale.address)).bignumber.equal(ONE_TOKEN.mul(FOUR).add(collectedFee));
+            await expectRevert(presale.invest(ZERO, signature.signature, TIER5, timeForSign, {from: account_five, value: ONE}), "(N)ENOUGH");
+
+            await time.increase(time.duration.days(3));
+            let presaleRitaBalance = await ritaToken.balanceOf(presale.address);
+            expect(presaleRitaBalance).bignumber.equal(ONE_HUNDRED_TOKENS.mul(FIVE).add(TEN_TOKENS.mul(FOUR)));
+            //expect(presaleRitaBalance).bignumber.equal(ONE_HUNDRED_TOKENS.mul(SEVEN).add(TEN_TOKENS.mul(TWO)));
+            console.log("PRESALE RITA BALANCE: ",presaleRitaBalance.toString());
+            await expectRevert(presale.claimTokens({from: account_four}), "A.LIQ");
+            //await expectRevert(presale.addLiquidity({from: account_one}), "DEV");
+            await expectRevert(presale.addLiquidity({from: deployer}), "W.PARAMS");
+
+            //add liquidity
+            await time.increase(time.duration.days(1));
+            await expectRevert(presale.addLiquidity({from: account_one}), "DEV");
+            await presale.addLiquidity({from: deployer});
+            presaleRitaBalance = await ritaToken.balanceOf(presale.address);
+            expect(presaleRitaBalance).bignumber.equal(ONE_HUNDRED_TOKENS.mul(FOUR).add(TEN_TOKENS.mul(FOUR)));
+            //pancakePairInstant = await PancakePair.at(await presale.lpAddress.call());
+            await expectRevert(presale.withdrawInvestment(account_five, ONE_HALF_TOKEN, {from: account_five}),"AFTERCAP");
+            let ritaBalanceThree = await ritaToken.balanceOf(account_three);
+            expect(ritaBalanceThree).bignumber.equal(ZERO);
+            await presale.claimTokens({from: account_three});
+            ritaBalanceThree = await ritaToken.balanceOf(account_three);
+            expect(ritaBalanceThree).bignumber.equal(TEN_TOKENS.mul(FOUR));
+            await expectRevert(presale.claimTokens({from: account_two}), "W.PARAMS"); //not an investor
+            let threeClaimObj = await presale.claimed.call(account_three);
+            console.log("CLAIMED OBJ: ", threeClaimObj[0].toString(), threeClaimObj[1].toString());
+            await expectRevert(presale.claimTokens({from: account_three}), "TIME"); //can't claim tokens twice
+            ritaBalanceThree = await ritaToken.balanceOf(account_four);
+            expect(ritaBalanceThree).bignumber.equal(ZERO);
+            await presale.claimTokens({from: account_four});
+            ritaBalanceThree = await ritaToken.balanceOf(account_four);
+            expect(ritaBalanceThree).bignumber.equal(TEN_TOKENS.mul(FOUR));
+            ritaBalanceThree = await ritaToken.balanceOf(account_five);
+            expect(ritaBalanceThree).bignumber.equal(ZERO);
+            await presale.claimTokens({from: account_five});
+            ritaBalanceThree = await ritaToken.balanceOf(account_five);
+            expect(ritaBalanceThree).bignumber.equal(TEN_TOKENS.mul(EIGHT));
+            console.log((await web3.eth.getBalance(account_one)).toString());
+            await presale.collectFundsRaised({from: account_one});
+            console.log((await web3.eth.getBalance(account_one)).toString());
+            console.log((await web3.eth.getBalance(presale.address)).toString());
+            let balanceDev = await web3.eth.getBalance(deployer);
+            console.log("BALANCE DEV: ", balanceDev.toString());
+            await presale.collectFee({from: deployer});
+            balanceDev = await web3.eth.getBalance(deployer);
+            console.log("BALANCE DEV: ", balanceDev.toString());
+            //console.log("LP TOKEN AMOUNT: ", (await pancakePairInstant.balanceOf(presale.address)).toString());
+            await expectRevert(presale.refundLpTokens({from: account_one}),"EARLY");
+
+            await time.increase(time.duration.days(30));
+            await presale.refundLpTokens({from: account_one});
+            await presale.claimTokens({from: account_three});
+            expect(await ritaToken.balanceOf(account_three)).bignumber.equal(TEN_TOKENS.mul(EIGHT));
+            await presale.claimTokens({from: account_four});
+            expect(await ritaToken.balanceOf(account_four)).bignumber.equal(TEN_TOKENS.mul(EIGHT));
+            await presale.claimTokens({from: account_five});
+            expect(await ritaToken.balanceOf(account_five)).bignumber.equal(ONE_HUNDRED_TOKENS.add(TEN_TOKENS.mul(SIX)));
+
+            await time.increase(time.duration.days(30));
+            console.log("THREE BALANCE: ",(await ritaToken.balanceOf(account_three)).toString());
+            await presale.claimTokens({from: account_three});
+            console.log("THREE BALANCE: ",(await ritaToken.balanceOf(account_three)).toString());
+            threeClaimObj = await presale.claimed.call(account_three);
+            console.log("CLAIMED OBJ: ", threeClaimObj[0].toString(), threeClaimObj[1].toString());
+            expect(await ritaToken.balanceOf(account_three)).bignumber.equal(ONE_HUNDRED_TOKENS);
+            await presale.claimTokens({from: account_four});
+            expect(await ritaToken.balanceOf(account_four)).bignumber.equal(ONE_HUNDRED_TOKENS);
+            await presale.claimTokens({from: account_five});
+            expect(await ritaToken.balanceOf(account_five)).bignumber.equal(ONE_HUNDRED_TOKENS.mul(TWO));
+            //console.log("LP TOKEN AMOUNT: ", (await pancakePairInstant.balanceOf(account_one)).toString());
+        }) */
+
+        /* it("cancel, change time, else", async()=>{
+            let info = require("./presalePublicInfo.json");
+            let liquidityInfo = require("./presalePublicLiq.json");
+            let stringInfo = require("./PresalePublicString.json");
+            let additionalInfo = require("./presaleCertifiedAddition.json");
+            info.tokenAddress = ritaToken.address;
+            let nowTime = await time.latest();
+            console.log(nowTime.toString());
+            info.openTime = nowTime.add(DAY.mul(FIVE));
+            info.closeTime = info.openTime.add(DAY.mul(FIVE));
+            liquidityInfo.liquidityAllocationTime = info.closeTime.add(DAY);
+            info.openTime = info.openTime.toString();
+            info.closeTime = info.closeTime.toString();
+            liquidityInfo.liquidityAllocationTime = liquidityInfo.liquidityAllocationTime.toString();
+            let timeForSign = await time.latest();
+            info._tokenAmount = "0";
+            info._timestamp = timeForSign.toString();
+            let data = web3.utils.soliditySha3(info.tokenAddress, account_one, '0' , info._timestamp);
+            let signature = await web3.eth.accounts.sign(data, "0x8d5fd3150e7d4fb26ab1439bad4d8027d912e90471dfbab871062ee64caee7be");
+            info._signature = signature.signature.toString();
+            additionalInfo.nativeToken = ZERO_ADDRESS;
+            console.log("INFO: ", info, "\nADDITIONAL: ",additionalInfo, "\nLIQUIDITY: ", liquidityInfo,  "\nSTRING INFO: ", stringInfo);
+            await ritaToken.approve(factory.address, ONE_THOUSAND_TOKENS.mul(ONE_HUNDRED), {from:account_one});
+            await ritaToken.mint(account_one, ONE_THOUSAND_TOKENS.mul(ONE_HUNDRED), {from:account_one});
+            console.log((await ritaToken.balanceOf(account_one)).toString());
+            //await expectRevert(factory.createPresaleCertified(info, additionalInfo, liquidityInfo, stringInfo, {from: account_one, value: new BN("50000000000000000")}), "Wrong liq param");
+            const receipt = await factory.createPresaleCertified(info, additionalInfo, liquidityInfo, stringInfo, {from: account_one, value: new BN("50000000000000000")});
+            console.log(receipt);
+            const presaleAddress = await library.getPresaleAddress(ZERO);
+            const presale = await PresaleCertified.at(presaleAddress);
+
+            await expectRevert(presale.changePresaleTime(nowTime, nowTime.add(DAY.mul(FIVE)), {from: account_one}), "TIME");
+            await presale.changePresaleTime(nowTime.add(TEN.mul(THREE)), nowTime.add(DAY.mul(FIVE)),{from: account_one});
+            const balanceBefore = await ritaToken.balanceOf(account_one);
+            await presale.cancelPresale({from: deployer});
+            const balanceAfter = await ritaToken.balanceOf(account_one);
+            expect(balanceAfter.sub(balanceBefore)).bignumber.equal(ONE_HUNDRED_TOKENS.mul(FIVE).add(TEN_TOKENS.mul(FOUR)));
+            await time.increase(time.duration.minutes(35));
+            await expectRevert(presale.invest(TIER1, signature.signature, TIER4, timeForSign, {from: account_three, value: ONE_TOKEN}), "lala");
+        }) */
 
         /*it('should create presale', async()=> {
             let info = require("./presalePublicInfo.json");

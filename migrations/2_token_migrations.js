@@ -1,5 +1,5 @@
 const TestToken = artifacts.require("TestToken");
 
 module.exports = function (deployer) {
-  deployer.deploy(TestToken, "LessToken", "LESS");
+  deployer.deploy(TestToken, "USD Coin", "USDC");
 };

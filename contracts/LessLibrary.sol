@@ -3,31 +3,22 @@ pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
-//import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "./interface.sol";
 
 contract LessLibrary is Ownable {
-    PresaleInfo[] private presaleAddresses; // track all presales created
+    address public usd;
+    address[] public factoryAddress = new address[](2);
 
     uint256 private minInvestorBalance = 1000 * 1e18;
     uint256 private votingTime = 3 days; //three days
-    uint256 private minStakeTime = 1 days; //one day
-    uint256 private minUnstakeTime = 6 days; //six days
-
-    address[] public factoryAddress = new address[](2);
-
     uint256 private minVoterBalance = 500 * 1e18; // minimum number of  tokens to hold to vote
     uint256 private minCreatorStakedBalance = 8000 * 1e18; // minimum number of tokens to hold to launch rocket
-
     uint8 private feePercent = 2;
-    uint256 private usdFee = 1000 * 1e6;
-
+    uint256 private usdFee;
     address private uniswapRouter; // uniswapV2 Router
-    address public usd;
-    //address public usdCoin;
-
     address payable private lessVault;
     address private devAddress;
+    PresaleInfo[] private presaleAddresses; // track all presales created
 
     mapping(address=> bool) public stablecoinWhitelist;
 
@@ -64,7 +55,6 @@ contract LessLibrary is Ownable {
 
     constructor(address _dev, address payable _vault, address _uniswapRouter, address _usd, address[] memory _stablecoins, uint8 _usdDecimals) {
         require(_dev != address(0) && _vault != address(0) && _usdDecimals > 0, "Wrong params");
-        //require(_vault != address(0));
         devAddress = _dev;
         lessVault = _vault;
         uniswapRouter = _uniswapRouter;
@@ -77,7 +67,6 @@ contract LessLibrary is Ownable {
 
     function setFactoryAddress(address _factory, uint8 _index) external onlyDev factoryIndexCheck(_index){
         require(_factory != address(0), "not 0");
-        //require(_index == 0 || _index == 1, "Invalid index");
         factoryAddress[_index] = _factory;
     }
 
@@ -86,21 +75,9 @@ contract LessLibrary is Ownable {
         usdFee = _newAmount;
     }
 
-    function getUsdFee() external view returns(uint256, address) {
-        return (usdFee, usd);
-    }
-
     function setUsdAddress(address _newAddress) external onlyDev {
         require(_newAddress != address(0), "0 addr");
         usd = _newAddress;
-    }
-
-    function setMinStakeTime(uint256 _new) external onlyDev {
-        minStakeTime = _new;
-    }
-
-    function setMinUnstakeTime(uint256 _new) external onlyDev {
-        minUnstakeTime = _new;
     }
 
     function addPresaleAddress(address _presale, bytes32 _title, string memory _description, bool _type)
@@ -124,18 +101,6 @@ contract LessLibrary is Ownable {
         stablecoinWhitelist[_stablecoin] = _isValid;
     }
 
-    function isValidStablecoin(address _stablecoin) public view returns (bool) {
-        return stablecoinWhitelist[_stablecoin];
-    }
-
-    function getPresalesCount() external view returns (uint256) {
-        return presaleAddresses.length;
-    }
-
-    function getPresaleAddress(uint256 id) external view returns (address) {
-        return presaleAddresses[id].presaleAddress;
-    }
-
     function changeDev(address _newDev) external onlyDev {
         require(_newDev != address(0), "Wrong new address");
         devAddress = _newDev;
@@ -146,16 +111,41 @@ contract LessLibrary is Ownable {
         votingTime = _newVotingTime;
     }
 
+    function setUniswapRouter(address _uniswapRouter) external onlyDev {
+        uniswapRouter = _uniswapRouter;
+    }
+
+    function setSingUsed(bytes memory _sign, address _presale) external {
+        require(isPresale[_presale], "u have no permition");
+        usedSignature[keccak256(_sign)] = true;
+    }
+
+    function addOrRemoveSigner(address _address, bool _canSign) external onlyDev {
+        signers[_address] = _canSign;
+    }
+
+    function getPresalesCount() external view returns (uint256) {
+        return presaleAddresses.length;
+    }
+
+    function getUsdFee() external view returns(uint256, address) {
+        return (usdFee, usd);
+    }
+
+    function isValidStablecoin(address _stablecoin) external view returns (bool) {
+        return stablecoinWhitelist[_stablecoin];
+    }
+
+    function getPresaleAddress(uint256 id) external view returns (address) {
+        return presaleAddresses[id].presaleAddress;
+    }
+
     function getVotingTime() external view returns(uint256){
         return votingTime;
     }
 
     function getMinInvestorBalance() external view returns (uint256) {
         return minInvestorBalance;
-    }
-
-    function getMinUnstakeTime() external view returns (uint256) {
-        return minUnstakeTime;
     }
 
     function getDev() external view onlyFactory returns (address) {
@@ -172,7 +162,6 @@ contract LessLibrary is Ownable {
     }
 
     function getFactoryAddress(uint8 _index) external view factoryIndexCheck(_index) returns (address) {
-        //require(_index == 0 || _index == 1, "Invalid index");
         return factoryAddress[_index];
     }
 
@@ -182,10 +171,6 @@ contract LessLibrary is Ownable {
 
     function getUniswapRouter() external view returns (address) {
         return uniswapRouter;
-    }
-
-    function setUniswapRouter(address _uniswapRouter) external onlyDev {
-        uniswapRouter = _uniswapRouter;
     }
 
     function calculateFee(uint256 amount) external view onlyPresale returns(uint256){
@@ -206,7 +191,6 @@ contract LessLibrary is Ownable {
         factoryIndexCheck(_index)
         returns (bool)
     {
-        //IPresaleFactory presaleFactory = IPresaleFactory(payable(factoryAddress[_index]));
         address messageSigner =
             ECDSA.recover(data, signature);
         require(
@@ -216,34 +200,11 @@ contract LessLibrary is Ownable {
         return true;
     }
 
-    function setSingUsed(bytes memory _sign, address _presale) external {
-        require(isPresale[_presale], "u have no permition");
-        usedSignature[keccak256(_sign)] = true;
-    }
-
     function getSignUsed(bytes memory _sign) external view returns(bool) {
         return usedSignature[keccak256(_sign)];
-    }
-
-    function addOrRemoveSigner(address _address, bool _canSign) external onlyDev {
-        signers[_address] = _canSign;
     }
 
     function isSigner(address _address) internal view returns (bool) {
         return signers[_address];
     }
-
-    /* function encoder(address _token, address _sender, uint256 _amount, uint256 _timestamp) public pure returns (bytes32) {
-        bytes memory enco = abi.encodePacked(
-                    _token,
-                    _sender,
-                    _amount,
-                    _timestamp
-                );
-        return keccak256(enco);
-    }
-
-    function decoder(bytes32 data, bytes memory signature) public pure returns(address) {
-        return ECDSA.recover(data, signature);
-    } */
 }

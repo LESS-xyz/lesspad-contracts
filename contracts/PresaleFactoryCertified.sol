@@ -1,12 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-//import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "./PresaleCertified.sol";
-//import "./libraries/Calculations.sol";
 
 contract PresaleFactoryCertified is ReentrancyGuard {
-
     LessLibrary public immutable safeLibrary;
     address public owner;
 
@@ -50,12 +47,12 @@ contract PresaleFactoryCertified is ReentrancyGuard {
         string whitepaper;
     }
 
-    modifier onlyOwner {
+    modifier onlyOwner() {
         require(msg.sender == owner);
         _;
     }
 
-    modifier onlyDev {
+    modifier onlyDev() {
         require(msg.sender == owner || safeLibrary.getDev() == msg.sender);
         _;
     }
@@ -73,9 +70,7 @@ contract PresaleFactoryCertified is ReentrancyGuard {
     );
     event Received(address indexed from, uint256 amount);
 
-    constructor(
-        address _bscsInfoAddress
-    ) {
+    constructor(address _bscsInfoAddress) {
         safeLibrary = LessLibrary(_bscsInfoAddress);
         owner = msg.sender;
     }
@@ -90,54 +85,56 @@ contract PresaleFactoryCertified is ReentrancyGuard {
         PresalePancakeSwapInfo calldata _cakeInfo,
         PresaleStringInfo calldata _stringInfo
     ) external payable nonReentrant returns (uint256 presaleId) {
-        require(!safeLibrary.getSignUsed(_info._signature), "used sign");
-        bytes memory encoded = abi.encodePacked(
-                    _info.tokenAddress,
-                    msg.sender,
-                    _info._tokenAmount,
-                    _info._timestamp
-                );
-        /*require(
-            safeLibrary._verifySigner(
-                keccak256(encoded),
-                _info._signature,
-                1
-            ),
-            "invalid signature"
-        );*/
-        //timing check
-        if(_addition.liquidity) {
-            require(_info.closeTime < _cakeInfo.liquidityAllocationTime,
-            "timing err");
-            require(_cakeInfo.liquidityPercentageAllocation > 0 && _cakeInfo.listingPriceInWei > 0, "Wrong liq param");
-        }
-        if(_addition.whitelist.length > 0){
-            require(block.timestamp + 86400 <=
-                _info.openTime, "timing err");
-        }
-        else {
-            require(block.timestamp <=
-                _info.openTime, "timing err");
-        }
         require(
-            6900 < _info.closeTime - _info.openTime, "timig err"
+            !safeLibrary.getSignUsed(_info._signature) &&
+                safeLibrary._verifySigner(
+                    keccak256(
+                        abi.encodePacked(
+                            _info.tokenAddress,
+                            msg.sender,
+                            _info._tokenAmount,
+                            _info._timestamp
+                        )
+                    ),
+                    _info._signature,
+                    1
+                ),
+            "SIGN"
         );
+        if (_addition.liquidity) {
+            require(
+                _info.closeTime < _cakeInfo.liquidityAllocationTime &&
+                    _cakeInfo.liquidityPercentageAllocation > 0 &&
+                    _cakeInfo.listingPriceInWei > 0 &&
+                    _cakeInfo.lpTokensLockDurationInDays > 29,
+                "LIQ"
+            );
+        }
+        if (_addition.whitelist.length == 0) {
+            require(block.timestamp + 86400 <= _info.openTime, "TIME");
+        } else {
+            require(block.timestamp <= _info.openTime, "TIME");
+        }
         require(
-            _info.tokenPriceInWei > 0 &&
+            6900 < _info.closeTime - _info.openTime &&
+                _info.tokenPriceInWei > 0 &&
                 _info.softCapInWei > 0 &&
                 _info.hardCapInWei > 0 &&
                 _info.hardCapInWei >= _info.softCapInWei,
-            "Wrong params"
+            "PARAM"
         );
-        if(address(0) != _addition.nativeToken) {
-            require(safeLibrary.isValidStablecoin(_addition.nativeToken), "Stablecoin is not whitelisted");
+        if (address(0) != _addition.nativeToken) {
+            require(
+                safeLibrary.isValidStablecoin(_addition.nativeToken),
+                "STABLECOIN"
+            );
         }
 
         ERC20 _token = ERC20(_info.tokenAddress);
 
-        //uint256 feeEth = Calculations.usdtToEthFee(address(safeLibrary));
-        uint256 feeEth = 50000000000000000;
-        require(msg.value >= feeEth && feeEth > 0, "value<=0");
+        uint256 feeEth = Calculations.usdtToEthFee(address(safeLibrary));
+        //uint256 feeEth = 50000000000000000;
+        require(msg.value >= feeEth && feeEth > 0, "FEE");
 
         // maxLiqPoolTokenAmount, maxTokensToBeSold, requiredTokenAmount
         uint256[] memory tokenAmounts = new uint256[](3);
@@ -155,7 +152,10 @@ contract PresaleFactoryCertified is ReentrancyGuard {
             safeLibrary.owner(),
             safeLibrary.getDev()
         );
-        require(_token.transferFrom(msg.sender, address(presale), tokenAmounts[2]), "can't get ur tkns");
+        require(
+            _token.transferFrom(msg.sender, address(presale), tokenAmounts[2]),
+            "T.TRANSFER"
+        );
         payable(address(presale)).transfer(feeEth);
         initializePresaleCertified(
             presale,
@@ -172,7 +172,7 @@ contract PresaleFactoryCertified is ReentrancyGuard {
             true
         );
         presale.setPresaleId(presaleId);
-        //safeLibrary.setSingUsed(_info._signature, address(presale));
+        safeLibrary.setSingUsed(_info._signature, address(presale));
         if (_addition.liquidity && _addition.automatically) {
             emit CertifiedAutoPresaleCreated(
                 presaleId,
@@ -210,7 +210,7 @@ contract PresaleFactoryCertified is ReentrancyGuard {
                 _tokensForSaleLiquidityFee[2]
             ]
         );
-        
+
         _presale.setCertifiedAddition(
             _addition.liquidity,
             _addition.automatically,
@@ -218,7 +218,7 @@ contract PresaleFactoryCertified is ReentrancyGuard {
             _addition.whitelist,
             _addition.nativeToken
         );
-        
+
         if (_addition.liquidity) {
             _presale.setUniswapInfo(
                 _cakeInfo.listingPriceInWei,

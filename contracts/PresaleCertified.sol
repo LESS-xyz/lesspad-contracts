@@ -5,11 +5,8 @@ import "./libraries/Calculations.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
-//import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
-
 contract PresaleCertified is ReentrancyGuard {
     uint256 public id;
-
     address payable public factoryAddress;
     address public platformOwner;
     LessLibrary public lessLib;
@@ -20,23 +17,17 @@ contract PresaleCertified is ReentrancyGuard {
     PresaleStringInfo public stringInfo;
     IntermediateVariables public intermediate;
 
-    bool private initiate;
-    bool private withdrawedFunds;
-    address private lpAddress;
-    uint256 private lpAmount;
     address private devAddress;
     uint256 private tokenMagnitude;
 
     mapping(address => Claimed) public claimed; // if true, it means investor already claimed the tokens or got a refund
     mapping(address => Investment) public investments; // total wei invested per address
-
+    mapping(bytes32 => uint256) public usedSignature;
     mapping(address => bool) private whitelistTier;
 
     address[][5] public whitelist; //for backend
     uint8[4] public poolPercentages;
     uint256[5] public stakingTiers;
-
-    mapping(bytes32 => uint256) public usedSignature;
 
     TicketsInfo[] public tickets;
 
@@ -67,6 +58,8 @@ contract PresaleCertified is ReentrancyGuard {
     }
 
     struct IntermediateVariables {
+        bool initiate;
+        bool withdrawedFunds;
         bool approved;
         bool cancelled;
         bool liquidityAdded;
@@ -81,6 +74,8 @@ contract PresaleCertified is ReentrancyGuard {
         uint8 liquidityPercentageAllocation;
         uint256 liquidityAllocationTime;
         uint256 unlockTime;
+        address lpAddress;
+        uint256 lpAmount;
     }
 
     struct PresaleStringInfo {
@@ -121,9 +116,8 @@ contract PresaleCertified is ReentrancyGuard {
 
     modifier liquidityAdded() {
         if (certifiedAddition.liquidity) {
-            require(intermediate.liquidityAdded, "Add liquidity");
+            require(intermediate.liquidityAdded, "A.LIQ");
         }
-        //require(intermediate.liquidityAdded, "Add liquidity");
         _;
     }
 
@@ -132,7 +126,7 @@ contract PresaleCertified is ReentrancyGuard {
         require(
             nowTime >= generalInfo.openTimePresale &&
                 nowTime <= generalInfo.closeTimePresale,
-            "Presale not open"
+            "N.OPEN"
         );
         _;
     }
@@ -146,7 +140,7 @@ contract PresaleCertified is ReentrancyGuard {
         require(
             block.timestamp >= generalInfo.openTimePresale - 86400 &&
                 block.timestamp < generalInfo.openTimePresale,
-            "Not registration time"
+            "N.REG"
         );
         _;
     }
@@ -175,38 +169,11 @@ contract PresaleCertified is ReentrancyGuard {
         address[2] memory _creatorToken,
         uint256[8] memory _priceTokensForSaleLiquiditySoftHardOpenCloseFee
     ) external onlyFabric {
+        require(!intermediate.initiate, "INITIATED");
+        intermediate.initiate = true;
         require(
             _creatorToken[0] != address(0) && _creatorToken[1] != address(0),
-            "0 addr"
-        );
-        require(!initiate, "already inited");
-        require(
-            _priceTokensForSaleLiquiditySoftHardOpenCloseFee[0] > 0,
-            "0 price"
-        );
-        require(
-            _priceTokensForSaleLiquiditySoftHardOpenCloseFee[5] >
-                block.timestamp + 86400 &&
-                _priceTokensForSaleLiquiditySoftHardOpenCloseFee[5] <
-                _priceTokensForSaleLiquiditySoftHardOpenCloseFee[6],
-            "Wrong time"
-        );
-        require(
-            _priceTokensForSaleLiquiditySoftHardOpenCloseFee[3] > 0 &&
-                _priceTokensForSaleLiquiditySoftHardOpenCloseFee[4] > 0 &&
-                _priceTokensForSaleLiquiditySoftHardOpenCloseFee[4] >
-                _priceTokensForSaleLiquiditySoftHardOpenCloseFee[3],
-            "Wrong caps"
-        );
-        require(
-            _priceTokensForSaleLiquiditySoftHardOpenCloseFee[1] +
-                _priceTokensForSaleLiquiditySoftHardOpenCloseFee[2] >
-                0,
-            "0 tokens"
-        );
-        require(
-            _priceTokensForSaleLiquiditySoftHardOpenCloseFee[7] > 0,
-            "No fee"
+            "ZERO ADDR"
         );
         generalInfo = PresaleInfo(
             payable(_creatorToken[0]),
@@ -224,8 +191,9 @@ contract PresaleCertified is ReentrancyGuard {
         uint256 tokenDecimals = ERC20(_creatorToken[1]).decimals();
         tokenMagnitude = uint256(10)**uint256(tokenDecimals);
         intermediate
-        .beginingAmount = _priceTokensForSaleLiquiditySoftHardOpenCloseFee[1];
-        initiate = true;
+            .beginingAmount = _priceTokensForSaleLiquiditySoftHardOpenCloseFee[
+            1
+        ];
     }
 
     function setCertifiedAddition(
@@ -235,15 +203,8 @@ contract PresaleCertified is ReentrancyGuard {
         address[] memory _whitelist,
         address _nativeToken
     ) external onlyFabric {
-        /*if (_liquidity) {
-            require(generalInfo.tokensForLiquidityLeft > 0, "Wrong liquidity token amount param");
-        }*/
-        /*if(_liquidity){
-            require(generalInfo.tokensForLiquidityLeft > 0, "Wrong liquidity token amount");
-        }*/
         uint256 len = _whitelist.length;
-        if (len != 0) {
-            //require(_whitelisted, "Wrong whitelist param");
+        if (len > 0) {
             for (uint256 i = 0; i < len; i++) {
                 whitelistTier[_whitelist[i]] = true;
             }
@@ -263,18 +224,13 @@ contract PresaleCertified is ReentrancyGuard {
         uint8 percent,
         uint256 allocationTime
     ) external onlyFabric {
-        require(
-            price != 0 &&
-                percent != 0 &&
-                allocationTime > generalInfo.closeTimePresale &&
-                duration >= 30,
-            "Wronh liquidity parameters"
-        );
         uniswapInfo = PresaleUniswapInfo(
             price,
             duration,
             percent,
             allocationTime,
+            0,
+            address(0),
             0
         );
     }
@@ -301,31 +257,17 @@ contract PresaleCertified is ReentrancyGuard {
         );
     }
 
-    function setArrays(uint8[4] memory _poolPercentages, uint256[5] memory _stakingTiers) external onlyFabric {
+    function setArrays(
+        uint8[4] memory _poolPercentages,
+        uint256[5] memory _stakingTiers
+    ) external onlyFabric {
         poolPercentages = _poolPercentages;
         stakingTiers = _stakingTiers;
     }
 
     function approvePresale() external onlyPlatformOwner {
+        require(!intermediate.approved, "APPROVED");
         intermediate.approved = true;
-    }
-
-    function getWhitelist(uint256 _tier)
-        external
-        view
-        returns (address[] memory)
-    {
-        if (certifiedAddition.whitelist.length > 0) {
-            return certifiedAddition.whitelist;
-        } else {
-            return whitelist[5 - _tier];
-        }
-    }
-
-    function isWhitelisting() external view returns (bool) {
-        return
-            block.timestamp <= generalInfo.openTimePresale &&
-            block.timestamp >= generalInfo.openTimePresale - 86400;
     }
 
     function register(
@@ -334,48 +276,37 @@ contract PresaleCertified is ReentrancyGuard {
         uint256 _timestamp,
         bytes memory _signature
     ) external openRegister presaleIsNotCancelled {
-        require(intermediate.approved, "Presale is not approved");
         require(
-            certifiedAddition.whitelist.length == 0,
-            "There won't be registration"
+            intermediate.approved &&
+                certifiedAddition.whitelist.length == 0 &&
+                _tier > 0 &&
+                _tier < 6 &&
+                msg.sender != generalInfo.creator &&
+                !lessLib.getSignUsed(_signature) &&
+                !whitelistTier[msg.sender] &&
+                lessLib._verifySigner(
+                    keccak256(
+                        abi.encodePacked(
+                            _tokenAmount,
+                            msg.sender,
+                            address(this),
+                            _timestamp
+                        )
+                    ),
+                    _signature,
+                    1
+                ),
+            "W.PARAMS"
         );
-        require(_tier > 0 && _tier < 6, "wr tier");
-        require(msg.sender != generalInfo.creator, "No permition");
-        require(!lessLib.getSignUsed(_signature), "used sign");
-        bytes memory encoded = abi.encodePacked(
-            _tokenAmount,
-            msg.sender,
-            address(this),
-            _timestamp
-        );
-        /*require(
-            lessLib._verifySigner(
-                keccak256(encoded),
-                _signature,
-                1
-            ),
-            "w sign"
-        );*/
+        lessLib.setSingUsed(_signature, address(this));
+        whitelistTier[msg.sender] = true;
         if (_tier < 3) {
             tickets.push(
                 TicketsInfo(msg.sender, _tokenAmount / (500 * tokenMagnitude))
             );
         }
-        require(!whitelistTier[msg.sender], "al. whitelisted");
-        whitelistTier[msg.sender] = true;
         whitelist[5 - _tier].push(msg.sender);
-        //lessLib.setSingUsed(_signature, address(this));
     }
-
-    /* function addInWhitelist(address addr) external onlyPresaleCreator {
-        require(addr != address(0) && addr != msg.sender, "Wrong address");
-        require(
-            block.timestamp < generalInfo.openTimePresale,
-            "Presale is running"
-        );
-        require(!whitelistTier[addr], "al. whitelisted");
-        whitelistTier[addr] = true;
-    } */
 
     // _tokenAmount only for non bnb tokens
     // poolPercentages starts from 5th to 2nd teirs
@@ -384,34 +315,29 @@ contract PresaleCertified is ReentrancyGuard {
         uint256 _tokenAmount,
         bytes memory _signature,
         uint256 _stakedAmount,
-        uint256 _timestamp/* ,
-        uint8[4] memory poolPercentages,
-        uint256[5] memory stakingTiers */
+        uint256 _timestamp
     ) public payable presaleIsNotCancelled onlyWhenOpenPresale nonReentrant {
-        require(whitelistTier[msg.sender], "not in whitelist");
-        //require(msg.sender != generalInfo.creator, "No permition");
-        require(!lessLib.getSignUsed(_signature), "used sign");
-        bytes memory encoded = abi.encodePacked(
-            _stakedAmount,
-            msg.sender,
-            address(this),
-            _timestamp
+        require(
+            whitelistTier[msg.sender] &&
+                !lessLib.getSignUsed(_signature) &&
+                intermediate.approved &&
+                lessLib._verifySigner(
+                    keccak256(
+                        abi.encodePacked(
+                            _stakedAmount,
+                            msg.sender,
+                            address(this),
+                            _timestamp
+                        )
+                    ),
+                    _signature,
+                    1
+                ),
+            "SIGN/REG"
         );
-        /*require(
-            lessLib._verifySigner(
-                keccak256(encoded),
-                _signature,
-                1
-            ),
-            "wrong sign"
-        );*/
-        require(intermediate.approved, "Presale is not approved");
+        lessLib.setSingUsed(_signature, address(this));
 
-        /* IUniswapV2Router02 uniswap = IUniswapV2Router02(
-            lessLib.getUniswapRouter()
-        ); */
-        uint256 amount = (address(certifiedAddition.nativeToken) ==
-            address(0))
+        uint256 amount = (address(certifiedAddition.nativeToken) == address(0))
             ? msg.value
             : _tokenAmount;
         require(amount > 0, "can't invest zero");
@@ -419,19 +345,24 @@ contract PresaleCertified is ReentrancyGuard {
         uint256 tokensLeft;
         uint256 nowTime = block.timestamp;
         if (certifiedAddition.whitelist.length > 0) {
-            require(_stakedAmount >= stakingTiers[1], "u cant vote");
+            require(
+                _stakedAmount >= stakingTiers[1],
+                "TIER4/5"
+            );
             tokensLeft = generalInfo.tokensForSaleLeft;
         } else {
             if (nowTime < generalInfo.openTimePresale + 3600) {
-                require(_stakedAmount >= stakingTiers[0], "u cant vote");
+                require(
+                    _stakedAmount >= stakingTiers[0],
+                    "TIER 5"
+                );
                 tokensLeft =
                     (intermediate.beginingAmount * poolPercentages[0]) /
                     100;
             } else if (nowTime < generalInfo.openTimePresale + 5400) {
                 require(
-                    _stakedAmount < stakingTiers[0] &&
-                        _stakedAmount >= stakingTiers[1],
-                    "u cant vote"
+                    _stakedAmount >= stakingTiers[1],
+                    "TIER 4"
                 );
                 tokensLeft =
                     (intermediate.beginingAmount -
@@ -439,9 +370,8 @@ contract PresaleCertified is ReentrancyGuard {
                     ((intermediate.beginingAmount * poolPercentages[1]) / 100);
             } else if (nowTime < generalInfo.openTimePresale + 6300) {
                 require(
-                    _stakedAmount < stakingTiers[1] &&
-                        _stakedAmount >= stakingTiers[2],
-                    "u cant vote"
+                    _stakedAmount >= stakingTiers[2],
+                    "TIER 3"
                 );
                 tokensLeft =
                     (intermediate.beginingAmount -
@@ -449,23 +379,27 @@ contract PresaleCertified is ReentrancyGuard {
                     ((intermediate.beginingAmount * poolPercentages[2]) / 100);
             } else if (nowTime < generalInfo.openTimePresale + 6900) {
                 require(
-                    _stakedAmount < stakingTiers[2] &&
-                        _stakedAmount >= stakingTiers[3],
-                    "u cant vote"
+                    _stakedAmount >= stakingTiers[3],
+                    "TIER 2"
                 );
                 tokensLeft =
                     (intermediate.beginingAmount -
                         generalInfo.tokensForSaleLeft) +
                     ((intermediate.beginingAmount * poolPercentages[3]) / 100);
             } else {
-                require(_stakedAmount >= stakingTiers[4], "u cant vote");
+                require(
+                    _stakedAmount >= stakingTiers[4],
+                    "TIER 1"
+                );
                 tokensLeft = generalInfo.tokensForSaleLeft;
             }
         }
         uint256 reservedTokens = getTokenAmount(amount);
-        require(intermediate.raisedAmount < generalInfo.hardCapInWei, "H cap");
-        require(tokensLeft >= reservedTokens, "Not enough tokens in pool");
-        require(amount > 0, "<0");
+        require(
+            intermediate.raisedAmount < generalInfo.hardCapInWei &&
+                tokensLeft >= reservedTokens,
+            "(N)ENOUGH"
+        );
         uint256 totalInvestmentInWei = investments[msg.sender].amountEth +
             amount;
 
@@ -478,33 +412,52 @@ contract PresaleCertified is ReentrancyGuard {
         investments[msg.sender].amountTokens += reservedTokens;
         generalInfo.tokensForSaleLeft -= reservedTokens;
 
-        //lessLib.setSingUsed(_signature, address(this));
+        if (address(certifiedAddition.nativeToken) != address(0))
+            require(
+                IERC20(certifiedAddition.nativeToken).transferFrom(
+                    msg.sender,
+                    address(this),
+                    amount
+                ),
+                "S.COIN TRANSFER"
+            );
     }
 
     function withdrawInvestment(address payable to, uint256 amount)
         external
         nonReentrant
     {
-        require(block.timestamp >= generalInfo.openTimePresale, "early");
-        //require(investments[msg.sender].amountEth != 0, "n investor");
-        require(investments[msg.sender].amountEth >= amount, "not enough amt");
-        require(amount > 0, "0 amt");
+        require(
+            to != address(0) &&
+                block.timestamp >= generalInfo.openTimePresale &&
+                investments[msg.sender].amountEth >= amount &&
+                amount > 0,
+            "W.PARAMS"
+        );
         if (!intermediate.cancelled) {
             require(
-                intermediate.raisedAmount < generalInfo.softCapInWei,
-                "afterCap withdraw"
+                intermediate.raisedAmount < generalInfo.softCapInWei &&
+                    !intermediate.liquidityAdded,
+                "AFTERCAP"
             );
         }
-        require(to != address(0), "0 addr");
         if (investments[msg.sender].amountEth - amount == 0) {
             intermediate.participants -= 1;
         }
-        to.transfer(amount);
         uint256 reservedTokens = getTokenAmount(amount);
         intermediate.raisedAmount -= amount;
         investments[msg.sender].amountEth -= amount;
         investments[msg.sender].amountTokens -= reservedTokens;
         generalInfo.tokensForSaleLeft += reservedTokens;
+
+        if (certifiedAddition.nativeToken == address(0)) {
+            to.transfer(amount);
+        } else {
+            require(
+                IERC20(certifiedAddition.nativeToken).transfer(to, amount),
+                "S.COIN TRANSFER"
+            );
+        }
     }
 
     function claimTokens()
@@ -515,70 +468,73 @@ contract PresaleCertified is ReentrancyGuard {
     {
         require(
             block.timestamp >= generalInfo.closeTimePresale &&
-                claimed[msg.sender].amountClaimed < investments[msg.sender].amountTokens &&
+                claimed[msg.sender].amountClaimed <
+                investments[msg.sender].amountTokens &&
                 investments[msg.sender].amountEth != 0,
-                "wrong time/params"
+            "W.PARAMS"
         );
         if (certifiedAddition.vesting == 0) {
-            claimed[msg.sender].amountClaimed = investments[msg.sender].amountTokens; // make sure this goes first before transfer to prevent reentrancy
+            claimed[msg.sender].amountClaimed = investments[msg.sender]
+                .amountTokens; // make sure this goes first before transfer to prevent reentrancy
             require(
                 IERC20(generalInfo.token).transfer(
                     msg.sender,
                     investments[msg.sender].amountTokens
                 ),
-                "Can't get your tokens"
+                "T.TRANSFER"
             );
-            //claimed[msg.sender].amountClaimed = investments[msg.sender].amountTokens; // make sure this goes first before transfer to prevent reentrancy
         } else {
             uint256 part = (investments[msg.sender].amountTokens *
                 certifiedAddition.vesting) / 100;
-            require(block.timestamp - claimed[msg.sender].lastTimeClaimed >= 2592000, "too early"); //one month vesting period == 30 days
+            require(
+                block.timestamp - claimed[msg.sender].lastTimeClaimed >=
+                    2592000,
+                "TIME"
+            ); //one month vesting period == 30 days
+            claimed[msg.sender].lastTimeClaimed = block.timestamp;
             if (
                 part <=
-                investments[msg.sender].amountTokens - claimed[msg.sender].amountClaimed
+                investments[msg.sender].amountTokens -
+                    claimed[msg.sender].amountClaimed
             ) {
+                claimed[msg.sender].amountClaimed += part;
                 require(
                     IERC20(generalInfo.token).transfer(msg.sender, part),
-                    "Can't get your tokens"
+                    "T.TRANSFER"
                 );
-                claimed[msg.sender].amountClaimed += part;
             } else {
+                part =
+                    investments[msg.sender].amountTokens -
+                    claimed[msg.sender].amountClaimed;
+                claimed[msg.sender].amountClaimed = investments[msg.sender]
+                    .amountTokens;
                 require(
-                    IERC20(generalInfo.token).transfer(
-                        msg.sender,
-                        investments[msg.sender].amountTokens -
-                            claimed[msg.sender].amountClaimed
-                    ),
-                    "Can't get your tokens"
+                    IERC20(generalInfo.token).transfer(msg.sender, part),
+                    "CT.TRANSFER"
                 );
-                claimed[msg.sender].amountClaimed += investments[msg.sender].amountTokens;
-                claimed[msg.sender].lastTimeClaimed = block.timestamp;
             }
         }
     }
 
     function addLiquidity() external presaleIsNotCancelled nonReentrant {
-        require(certifiedAddition.liquidity, "Liquidity not provided");
         require(
-            intermediate.raisedAmount >= generalInfo.softCapInWei,
-            "sCap n riched"
+            certifiedAddition.liquidity &&
+                intermediate.raisedAmount >= generalInfo.softCapInWei &&
+                uniswapInfo.liquidityAllocationTime <= block.timestamp &&
+                !intermediate.liquidityAdded,
+            "W.PARAMS"
         );
         if (certifiedAddition.automatically) {
-            require(msg.sender == devAddress, "only dev");
+            require(msg.sender == devAddress, "DEV");
         } else {
-            require(msg.sender == generalInfo.creator, "only creator");
+            require(msg.sender == generalInfo.creator, "CREATOR");
         }
-        require(
-            uniswapInfo.liquidityAllocationTime <= block.timestamp,
-            "early"
-        );
-        require(block.timestamp >= generalInfo.closeTimePresale, "n closed");
-        require(!intermediate.liquidityAdded, "already added");
         uint256 raisedAmount = intermediate.raisedAmount;
-        if (raisedAmount == 0) {
-            intermediate.liquidityAdded = true;
-            return;
-        }
+
+        intermediate.liquidityAdded = true;
+        uniswapInfo.unlockTime =
+            block.timestamp +
+            (uniswapInfo.lpTokensLockDurationInDays * 24 * 60 * 60);
 
         IUniswapV2Router02 uniswapRouter = IUniswapV2Router02(
             address(lessLib.getUniswapRouter())
@@ -601,8 +557,10 @@ contract PresaleCertified is ReentrancyGuard {
 
         require(
             generalInfo.tokensForLiquidityLeft >= liqPoolTokenAmount,
-            "no liquidity"
+            "N.ENOUGH"
         );
+
+        generalInfo.tokensForLiquidityLeft -= liqPoolTokenAmount;
 
         IERC20 token = IERC20(generalInfo.token);
 
@@ -610,7 +568,7 @@ contract PresaleCertified is ReentrancyGuard {
 
         uint256 amountEth;
 
-        (, amountEth, lpAmount) = uniswapRouter.addLiquidityETH{
+        (, amountEth, uniswapInfo.lpAmount) = uniswapRouter.addLiquidityETH{
             value: liqPoolEthAmount
         }(
             address(token),
@@ -626,16 +584,10 @@ contract PresaleCertified is ReentrancyGuard {
         IUniswapV2Factory02 uniswapFactory = IUniswapV2Factory02(
             uniswapRouter.factory()
         );
-        lpAddress = uniswapFactory.getPair(
+        uniswapInfo.lpAddress = uniswapFactory.getPair(
             uniswapRouter.WETH(),
             address(token)
         );
-
-        generalInfo.tokensForLiquidityLeft -= liqPoolTokenAmount;
-        intermediate.liquidityAdded = true;
-        uniswapInfo.unlockTime =
-            block.timestamp +
-            (uniswapInfo.lpTokensLockDurationInDays * 24 * 60 * 60);
     }
 
     function collectFundsRaised()
@@ -647,32 +599,22 @@ contract PresaleCertified is ReentrancyGuard {
     {
         require(
             intermediate.raisedAmount >= generalInfo.softCapInWei,
-            "sCap n riched"
+            "NO SOFTCAP"
         );
-        require(!withdrawedFunds, "only once");
-        withdrawedFunds = true;
-        uint256 collectedBalance;
+        require(!intermediate.withdrawedFunds, "ONCE");
+        intermediate.withdrawedFunds = true;
+        uint256 collectedBalance = intermediate.raisedAmount;
         if (address(0) == certifiedAddition.nativeToken) {
-            collectedBalance = address(this).balance;
-            if (collectedBalance > 0) {
-                payable(generalInfo.creator).transfer(
-                    collectedBalance
-                );
-            }
+            payable(generalInfo.creator).transfer(collectedBalance);
         } else {
-            collectedBalance = IERC20(certifiedAddition.nativeToken)
-            .balanceOf(address(this));
-            if (collectedBalance > 0) {
-                require(
-                    IERC20(certifiedAddition.nativeToken).transfer(
-                        generalInfo.creator,
-                        collectedBalance
-                    ),
-                    "Can not get your tokens"
-                );
-            }
+            require(
+                IERC20(certifiedAddition.nativeToken).transfer(
+                    generalInfo.creator,
+                    collectedBalance
+                ),
+                "S.COIN TRANSFER"
+            );
         }
-        //_withdrawUnsoldTokens();
         uint256 unsoldTokensAmount = generalInfo.tokensForSaleLeft +
             generalInfo.tokensForLiquidityLeft;
         if (unsoldTokensAmount > 0) {
@@ -681,7 +623,7 @@ contract PresaleCertified is ReentrancyGuard {
                     generalInfo.creator,
                     unsoldTokensAmount
                 ),
-                "can't send tokens"
+                "T.TRANSFER"
             );
         }
     }
@@ -693,32 +635,45 @@ contract PresaleCertified is ReentrancyGuard {
         onlyPresaleCreator
         liquidityAdded
     {
-        require(lpAmount != 0 && block.timestamp >= uniswapInfo.unlockTime);
         require(
-            IERC20(lpAddress).transfer(generalInfo.creator, lpAmount),
-            "transf.fail"
+            uniswapInfo.lpAmount > 0 &&
+                block.timestamp >= uniswapInfo.unlockTime,
+            "EARLY"
         );
-        lpAmount = 0;
+        require(
+            IERC20(uniswapInfo.lpAddress).transfer(
+                generalInfo.creator,
+                uniswapInfo.lpAmount
+            ),
+            "LP.TRANSFER"
+        );
+        uniswapInfo.lpAmount = 0;
     }
 
     function collectFee() external nonReentrant {
-        require(generalInfo.collectedFee > 0, "already withdrawn");
+        require(
+            msg.sender == generalInfo.creator || msg.sender == platformOwner,
+            "OWNERS"
+        );
+        uint256 collectedFee = generalInfo.collectedFee;
+        require(collectedFee > 0, "WITHDRAWN");
         generalInfo.collectedFee = 0;
-        if (
-            intermediate.approved &&
-            !intermediate.cancelled
-        ) {
-            payable(platformOwner).transfer(generalInfo.collectedFee);
+        if (intermediate.approved && !intermediate.cancelled) {
+            payable(platformOwner).transfer(collectedFee);
         } else {
-            payable(generalInfo.creator).transfer(generalInfo.collectedFee);
-            uint256 bal = IERC20(generalInfo.token).balanceOf(address(this));
-            if(bal>0){
-                require(IERC20(generalInfo.token).transfer(generalInfo.creator, bal), "con't get ur tkns");
-            }
-            //require(IERC20(generalInfo.token).transfer(generalInfo.creator, bal), "con't get ur tkns");
             intermediate.cancelled = true;
+            payable(generalInfo.creator).transfer(collectedFee);
+            uint256 bal = IERC20(generalInfo.token).balanceOf(address(this));
+            if (bal > 0) {
+                require(
+                    IERC20(generalInfo.token).transfer(
+                        generalInfo.creator,
+                        bal
+                    ),
+                    "T.TRANSFER"
+                );
+            }
         }
-        //payable(platformOwner).transfer(generalInfo.collectedFee);
     }
 
     function changePresaleTime(uint256 _newOpenTime, uint256 _newCloseTime)
@@ -726,37 +681,46 @@ contract PresaleCertified is ReentrancyGuard {
         presaleIsNotCancelled
         onlyPresaleCreator
     {
-        require(block.timestamp < generalInfo.openTimePresale, "started");
-        if (certifiedAddition.whitelist.length > 0) {
-            require(_newOpenTime > block.timestamp + 86400, "wrong param");
-        }
         require(
-            _newCloseTime - _newOpenTime > 6900 &&
-                _newCloseTime < uniswapInfo.liquidityAllocationTime
+            block.timestamp < generalInfo.openTimePresale &&
+                _newCloseTime - _newOpenTime > 6900 &&
+                block.timestamp < _newOpenTime,
+            "TIME"
         );
+        if (certifiedAddition.whitelist.length == 0) {
+            require(_newOpenTime > block.timestamp + 86400, "W.PARAMS");
+        }
+        if (certifiedAddition.liquidity) {
+            require(
+                _newCloseTime < uniswapInfo.liquidityAllocationTime,
+                "W.LIQ.TIME"
+            );
+        }
         generalInfo.openTimePresale = _newOpenTime;
         generalInfo.closeTimePresale = _newCloseTime;
     }
 
     function cancelPresale() external presaleIsNotCancelled {
-        if(intermediate.raisedAmount < generalInfo.softCapInWei && block.timestamp >= generalInfo.closeTimePresale) {
-            require(msg.sender == generalInfo.creator, "only pres creator");
+        if (
+            intermediate.raisedAmount < generalInfo.softCapInWei &&
+            block.timestamp >= generalInfo.closeTimePresale
+        ) {
+            require(
+                msg.sender == generalInfo.creator ||
+                    msg.sender == platformOwner,
+                "OWNERS"
+            );
+        } else {
+            require(msg.sender == platformOwner, "P.OWNER");
         }
-        else {
-            require(msg.sender == platformOwner, "only platf own");
-        }
-        /* _withdrawUnsoldTokens();
-        intermediate.cancelled = true; */
-        uint256 bal = IERC20(generalInfo.token).balanceOf(address(this));
-        if(bal > 0){
-            require(IERC20(generalInfo.token).transfer(generalInfo.creator, bal), "con't get ur tkns");
-        }
-        //require(IERC20(generalInfo.token).transfer(generalInfo.creator, bal), "con't get ur tkns");
         intermediate.cancelled = true;
-    }
-
-    function getPresaleId() external view returns (uint256) {
-        return id;
+        uint256 bal = IERC20(generalInfo.token).balanceOf(address(this));
+        if (bal > 0) {
+            require(
+                IERC20(generalInfo.token).transfer(generalInfo.creator, bal),
+                "T.TRANSFER"
+            );
+        }
     }
 
     function setPresaleId(uint256 _id) external onlyFabric {
@@ -766,20 +730,26 @@ contract PresaleCertified is ReentrancyGuard {
         id = _id;
     }
 
-    function getGenInfo()
+    function getWhitelist(uint256 _tier)
         external
         view
-        returns (
-            uint256,
-            uint256,
-            uint256
-        )
+        returns (address[] memory)
     {
-        return (
-            generalInfo.tokensForSaleLeft,
-            generalInfo.tokensForLiquidityLeft,
-            generalInfo.collectedFee
-        );
+        if (certifiedAddition.whitelist.length > 0) {
+            return certifiedAddition.whitelist;
+        } else {
+            return whitelist[5 - _tier];
+        }
+    }
+
+    function isWhitelisting() external view returns (bool) {
+        return
+            block.timestamp <= generalInfo.openTimePresale &&
+            block.timestamp >= generalInfo.openTimePresale - 86400;
+    }
+
+    function getPresaleId() external view returns (uint256) {
+        return id;
     }
 
     function getTokenAmount(uint256 _weiAmount)
@@ -789,18 +759,4 @@ contract PresaleCertified is ReentrancyGuard {
     {
         return (_weiAmount * tokenMagnitude) / generalInfo.tokenPriceInWei;
     }
-
-    /* function _withdrawUnsoldTokens() internal nonReentrant {
-        uint256 unsoldTokensAmount = generalInfo.tokensForSaleLeft +
-            generalInfo.tokensForLiquidityLeft;
-        if (unsoldTokensAmount > 0) {
-            require(
-                IERC20(generalInfo.token).transfer(
-                    generalInfo.creator,
-                    unsoldTokensAmount
-                ),
-                "can't send tokens"
-            );
-        }
-    } */
 }

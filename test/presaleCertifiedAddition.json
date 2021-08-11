@@ -1,5 +1,5 @@
 {
-    "liquidity": false,
+    "liquidity":  false,
     "automatically": false,
     "vesting": "0",
     "whitelist": [],
