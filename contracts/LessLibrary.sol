@@ -9,7 +9,6 @@ contract LessLibrary is Ownable {
     address public usd;
     address[] public factoryAddress = new address[](2);
 
-    uint256 private minInvestorBalance = 1000 * 1e18;
     uint256 private votingTime = 3 days; //three days
     uint256 private minVoterBalance = 500 * 1e18; // minimum number of  tokens to hold to vote
     uint256 private minCreatorStakedBalance = 8000 * 1e18; // minimum number of tokens to hold to launch rocket
@@ -142,10 +141,6 @@ contract LessLibrary is Ownable {
 
     function getVotingTime() external view returns(uint256){
         return votingTime;
-    }
-
-    function getMinInvestorBalance() external view returns (uint256) {
-        return minInvestorBalance;
     }
 
     function getDev() external view onlyFactory returns (address) {

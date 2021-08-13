@@ -86,6 +86,7 @@ contract PresaleFactoryCertified is ReentrancyGuard {
         PresaleStringInfo calldata _stringInfo
     ) external payable nonReentrant returns (uint256 presaleId) {
         require(
+            safeLibrary.getMinCreatorStakedBalance() <= _info._tokenAmount &&
             !safeLibrary.getSignUsed(_info._signature) &&
                 safeLibrary._verifySigner(
                     keccak256(

@@ -23,7 +23,7 @@ contract PresaleCertified is ReentrancyGuard {
     mapping(address => Claimed) public claimed; // if true, it means investor already claimed the tokens or got a refund
     mapping(address => Investment) public investments; // total wei invested per address
     mapping(bytes32 => uint256) public usedSignature;
-    mapping(address => bool) private whitelistTier;
+    mapping(address => bool) public whitelistTier;
 
     address[][5] public whitelist; //for backend
     uint8[4] public poolPercentages;
