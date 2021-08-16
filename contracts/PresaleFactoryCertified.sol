@@ -112,7 +112,7 @@ contract PresaleFactoryCertified is ReentrancyGuard {
             );
         }
         if (_addition.whitelist.length == 0) {
-            require(block.timestamp + 86400 <= _info.openTime, "TIME");
+            require(block.timestamp + safeLibrary.getRegistrationTime() <= _info.openTime, "TIME");
         } else {
             require(block.timestamp <= _info.openTime, "TIME");
         }
