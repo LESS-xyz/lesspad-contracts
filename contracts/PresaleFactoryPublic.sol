@@ -10,6 +10,8 @@ contract PresaleFactoryPublic {
     PresalePublic presale; */
     address public owner;
 
+    uint256 private lastTierTime = 6900;
+
     struct PresaleInfo {
         address tokenAddress;
         uint256 tokenPriceInWei;
@@ -80,25 +82,27 @@ contract PresaleFactoryPublic {
         // signature check
         require(
             safeLibrary._verifySigner(
-                keccak256(
-                    abi.encodePacked(
-                        _info.tokenAddress,
-                        msg.sender,
-                        _info._tokenAmount,
-                        _info._timestamp
-                    )
-                ),
+                keccak256(abi.encodePacked(
+                    _info.tokenAddress,
+                    msg.sender,
+                    _info._tokenAmount,
+                    _info._timestamp
+                )),
                 _info._signature,
                 0
             ),
             "invalid signature"
         );
+        require(
+            safeLibrary.getMinCreatorStakedBalance() <= _info._tokenAmount,
+            "not enough staked tokens"
+        );
         //timing check
         require(
             _info.openTime > block.timestamp &&
-                _info.openVotingTime + safeLibrary.getVotingTime() + 86400 <=
+                _info.openVotingTime + safeLibrary.getVotingTime() + safeLibrary.getRegistrationTime() <= 
                 _info.openTime &&
-                _info.closeTime - _info.openTime > 6900 &&
+                _info.closeTime - _info.openTime > lastTierTime &&
                 _info.closeTime < _cakeInfo.liquidityAllocationTime,
             "timing err"
         );
@@ -109,22 +113,20 @@ contract PresaleFactoryPublic {
                 _info.hardCapInWei >= _info.softCapInWei &&
                 _cakeInfo.listingPriceInWei > 0 &&
                 _cakeInfo.liquidityPercentageAllocation > 0 &&
-                _cakeInfo.lpTokensLockDurationInDays > 0,
+                _cakeInfo.lpTokensLockDurationInDays >= 30,
             "Wrong params"
         );
 
         ERC20 _token = ERC20(_info.tokenAddress);
 
-        // Disabled for testing
+      
         uint256 feeEth = Calculations.usdtToEthFee(address(safeLibrary));
-        //uint256 feeEth = 50000000000000000;
+        // uint256 feeEth = 50000000000000;
         require(msg.value >= feeEth && feeEth > 0, "value<=0");
 
         // maxLiqPoolTokenAmount, maxTokensToBeSold, requiredTokenAmount
         uint256[] memory tokenAmounts = new uint256[](3);
-
-        // Disabled for testing
-
+        
         tokenAmounts = Calculations.countAmountOfTokens(
             _info.hardCapInWei,
             _info.tokenPriceInWei,
@@ -155,7 +157,8 @@ contract PresaleFactoryPublic {
             address(presale),
             _stringInfo.saleTitle,
             _stringInfo.description,
-            false
+            false,
+            _info.openVotingTime
         );
         presale.setPresaleId(presaleId);
         safeLibrary.setSingUsed(_info._signature, address(presale));

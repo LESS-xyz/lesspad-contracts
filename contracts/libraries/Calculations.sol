@@ -62,18 +62,11 @@ library Calculations {
         }
 
         tokenAmounts[1] =
-            (((_hardCap * 110) / 100) * (uint256(10)**uint256(_decimals))) /
+            (_hardCap * (uint256(10)**uint256(_decimals))) /
             _tokenPrice;
         tokenAmounts[2] = tokenAmounts[0] + tokenAmounts[1];
         require(tokenAmounts[1] > 0, "Wrong parameters");
         return tokenAmounts;
     }
 
-    /* function wethReturn(address _library) external view returns(address){
-        LessLibrary safeLibrary = LessLibrary(_library);
-        IUniswapV2Router02 uniswap = IUniswapV2Router02(
-            safeLibrary.getUniswapRouter()
-        );
-        return uniswap.WETH();
-    } */
 }

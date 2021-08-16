@@ -29,6 +29,9 @@ contract PresaleCertified is ReentrancyGuard {
     uint8[4] public poolPercentages;
     uint256[5] public stakingTiers;
 
+    uint256[4] private tiersTimes = [6900, 6300, 5400, 3600]; // 1h55m-> 1h45m -> 1h30m -> 1h
+    uint256 private lpDaySeconds = 1 days; // one day
+
     TicketsInfo[] public tickets;
 
     struct TicketsInfo {
@@ -343,7 +346,13 @@ contract PresaleCertified is ReentrancyGuard {
         require(amount > 0, "can't invest zero");
 
         uint256 tokensLeft;
+        uint256 tokensSold = intermediate.beginingAmount - generalInfo.tokensForSaleLeft;
         uint256 nowTime = block.timestamp;
+        uint256[5] memory poolAmounts;
+        uint256 prevPoolsTotalAmount;
+        for (uint256 i = 0; i < 4; i++) {
+            poolAmounts[i] = (intermediate.beginingAmount * poolPercentages[i] ) / 100;
+        }
         if (certifiedAddition.whitelist.length > 0) {
             require(
                 _stakedAmount >= stakingTiers[1],
@@ -351,41 +360,33 @@ contract PresaleCertified is ReentrancyGuard {
             );
             tokensLeft = generalInfo.tokensForSaleLeft;
         } else {
-            if (nowTime < generalInfo.openTimePresale + 3600) {
+            if (nowTime < generalInfo.openTimePresale + tiersTimes[3]) {
                 require(
                     _stakedAmount >= stakingTiers[0],
                     "TIER 5"
                 );
-                tokensLeft =
-                    (intermediate.beginingAmount * poolPercentages[0]) /
-                    100;
-            } else if (nowTime < generalInfo.openTimePresale + 5400) {
+                tokensLeft = poolAmounts[0] - tokensSold;
+            } else if (nowTime < generalInfo.openTimePresale + tiersTimes[2]) {
                 require(
                     _stakedAmount >= stakingTiers[1],
                     "TIER 4"
                 );
-                tokensLeft =
-                    (intermediate.beginingAmount -
-                        generalInfo.tokensForSaleLeft) +
-                    ((intermediate.beginingAmount * poolPercentages[1]) / 100);
-            } else if (nowTime < generalInfo.openTimePresale + 6300) {
+                prevPoolsTotalAmount = poolAmounts[0];
+                tokensLeft = poolAmounts[1] + prevPoolsTotalAmount - tokensSold;
+            } else if (nowTime < generalInfo.openTimePresale + tiersTimes[1]) {
                 require(
                     _stakedAmount >= stakingTiers[2],
                     "TIER 3"
                 );
-                tokensLeft =
-                    (intermediate.beginingAmount -
-                        generalInfo.tokensForSaleLeft) +
-                    ((intermediate.beginingAmount * poolPercentages[2]) / 100);
-            } else if (nowTime < generalInfo.openTimePresale + 6900) {
+                prevPoolsTotalAmount = poolAmounts[0] + poolAmounts[1];
+                tokensLeft = poolAmounts[2] + prevPoolsTotalAmount - tokensSold;
+            } else if (nowTime < generalInfo.openTimePresale + tiersTimes[0]) {
                 require(
                     _stakedAmount >= stakingTiers[3],
                     "TIER 2"
                 );
-                tokensLeft =
-                    (intermediate.beginingAmount -
-                        generalInfo.tokensForSaleLeft) +
-                    ((intermediate.beginingAmount * poolPercentages[3]) / 100);
+                prevPoolsTotalAmount = poolAmounts[0] + poolAmounts[1] + poolAmounts[2];
+                tokensLeft = poolAmounts[3] + prevPoolsTotalAmount - tokensSold;
             } else {
                 require(
                     _stakedAmount >= stakingTiers[4],
@@ -534,7 +535,7 @@ contract PresaleCertified is ReentrancyGuard {
         intermediate.liquidityAdded = true;
         uniswapInfo.unlockTime =
             block.timestamp +
-            (uniswapInfo.lpTokensLockDurationInDays * 24 * 60 * 60);
+            (uniswapInfo.lpTokensLockDurationInDays * lpDaySeconds);
 
         IUniswapV2Router02 uniswapRouter = IUniswapV2Router02(
             address(lessLib.getUniswapRouter())

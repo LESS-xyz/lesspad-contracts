@@ -7,8 +7,10 @@ const Calculations = artifacts.require("Calculations");
 module.exports = function (deployer) {
   return deployer.then(async () => {
     //const calc = Calculations.at("0x0E2967580BE47c5ceC6Af37B6393829300cFe22E");
-    const calc = await Calculations.at("0x8fFdc72Ca758984D0A0E1084e35340Fe04de9b45");
-    const library = await LessLibrary.at("0xef38c1f4fA0f3ceA1bA1756947ad5dd1B0BC9640");
+    //const calc = await Calculations.at("0x8fFdc72Ca758984D0A0E1084e35340Fe04de9b45");
+    //const library = await LessLibrary.at("0xef38c1f4fA0f3ceA1bA1756947ad5dd1B0BC9640");
+    const calc = await Calculations.deployed();
+    const library = await LessLibrary.deployed();
     //const ritaToken = TestTokenTwo.at("0x63Adf149ac95cb7cc24254Cfad2ceD43D6b067E3");
     await PresaleFactoryCertified.link(Calculations, calc.address);
     const factory = await deployer.deploy(

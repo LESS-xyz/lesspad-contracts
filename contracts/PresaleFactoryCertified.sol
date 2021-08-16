@@ -170,7 +170,8 @@ contract PresaleFactoryCertified is ReentrancyGuard {
             address(presale),
             _stringInfo.saleTitle,
             _stringInfo.description,
-            true
+            true,
+            0
         );
         presale.setPresaleId(presaleId);
         safeLibrary.setSingUsed(_info._signature, address(presale));

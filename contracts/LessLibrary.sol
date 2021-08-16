@@ -9,9 +9,11 @@ contract LessLibrary is Ownable {
     address public usd;
     address[] public factoryAddress = new address[](2);
 
+    uint256 private minInvestorBalance = 1000 * 1e18;
     uint256 private votingTime = 3 days; //three days
+    uint256 private registrationTime = 1 days; // one day
     uint256 private minVoterBalance = 500 * 1e18; // minimum number of  tokens to hold to vote
-    uint256 private minCreatorStakedBalance = 8000 * 1e18; // minimum number of tokens to hold to launch rocket
+    uint256 private minCreatorStakedBalance = 10000 * 1e18; // minimum number of tokens to hold to launch rocket
     uint8 private feePercent = 2;
     uint256 private usdFee;
     address private uniswapRouter; // uniswapV2 Router
@@ -30,6 +32,7 @@ contract LessLibrary is Ownable {
         address presaleAddress;
         string description;
         bool isCertified;
+        uint256 openVotingTime;
     }
 
     modifier onlyDev() {
@@ -79,12 +82,18 @@ contract LessLibrary is Ownable {
         usd = _newAddress;
     }
 
-    function addPresaleAddress(address _presale, bytes32 _title, string memory _description, bool _type)
+    function addPresaleAddress(
+        address _presale,
+        bytes32 _title,
+        string memory _description,
+        bool _type,
+        uint256 _openVotingTime
+    )
         external
         onlyFactory
         returns (uint256)
     {
-        presaleAddresses.push(PresaleInfo(_title, _presale, _description, _type));
+        presaleAddresses.push(PresaleInfo(_title, _presale, _description, _type, _openVotingTime));
         isPresale[_presale] = true;
         return presaleAddresses.length - 1;
     }
@@ -108,6 +117,11 @@ contract LessLibrary is Ownable {
     function setVotingTime(uint256 _newVotingTime) external onlyDev {
         require(_newVotingTime > 0, "Wrong new time");
         votingTime = _newVotingTime;
+    }
+
+    function setRegistrationTime(uint256 _newRegistrationTime) external onlyDev {
+        require(_newRegistrationTime > 0, "Wrong new time");
+        registrationTime = _newRegistrationTime;
     }
 
     function setUniswapRouter(address _uniswapRouter) external onlyDev {
@@ -141,6 +155,14 @@ contract LessLibrary is Ownable {
 
     function getVotingTime() external view returns(uint256){
         return votingTime;
+    }
+
+    function getRegistrationTime() external view returns(uint256){
+        return registrationTime;
+    }
+
+    function getMinInvestorBalance() external view returns (uint256) {
+        return minInvestorBalance;
     }
 
     function getDev() external view onlyFactory returns (address) {
