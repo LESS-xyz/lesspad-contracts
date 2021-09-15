@@ -1,16 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-//import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "./PresalePublic.sol";
 
 contract PresaleFactoryPublic {
     LessLibrary public immutable safeLibrary;
-    /* ERC20 public lessToken;
-    PresalePublic presale; */
     address public owner;
 
-    uint256 private lastTierTime = 6900;
+    uint256 private lastTierTime = 1200;
 
     struct PresaleInfo {
         address tokenAddress;
@@ -43,16 +40,6 @@ contract PresaleFactoryPublic {
         string linkLogo;
         string description;
         string whitepaper;
-    }
-
-    modifier onlyOwner {
-        require(msg.sender == owner);
-        _;
-    }
-
-    modifier onlyDev {
-        require(msg.sender == owner || safeLibrary.getDev() == msg.sender);
-        _;
     }
 
     event PublicPresaleCreated(
@@ -120,8 +107,8 @@ contract PresaleFactoryPublic {
         ERC20 _token = ERC20(_info.tokenAddress);
 
       
-        uint256 feeEth = Calculations.usdtToEthFee(address(safeLibrary));
-        // uint256 feeEth = 50000000000000;
+        //uint256 feeEth = Calculations.usdtToEthFee(address(safeLibrary)); //PROD
+        uint256 feeEth = 500000000;
         require(msg.value >= feeEth && feeEth > 0, "value<=0");
 
         // maxLiqPoolTokenAmount, maxTokensToBeSold, requiredTokenAmount
@@ -138,7 +125,6 @@ contract PresaleFactoryPublic {
         PresalePublic presale = new PresalePublic(
             payable(address(this)),
             address(safeLibrary),
-            safeLibrary.owner(),
             safeLibrary.getDev()
         );
         require(
@@ -211,7 +197,8 @@ contract PresaleFactoryPublic {
         _presale.setArrays(_info.poolPercentages, _info.stakingTiers);
     }
 
-    function migrateTo(address payable _newFactory) external onlyDev {
+    function migrateTo(address payable _newFactory) external {
+        require(msg.sender == owner || safeLibrary.getDev() == msg.sender);
         _newFactory.transfer(address(this).balance);
     }
 }

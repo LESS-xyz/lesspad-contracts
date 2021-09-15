@@ -62,8 +62,7 @@ library Calculations {
         }
 
         tokenAmounts[1] =
-            (_hardCap * (uint256(10)**uint256(_decimals))) /
-            _tokenPrice;
+            (_hardCap  * (uint256(10)**uint256(_decimals))) / _tokenPrice;
         tokenAmounts[2] = tokenAmounts[0] + tokenAmounts[1];
         require(tokenAmounts[1] > 0, "Wrong parameters");
         return tokenAmounts;

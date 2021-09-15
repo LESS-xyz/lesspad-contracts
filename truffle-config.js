@@ -102,7 +102,61 @@ module.exports = {
             gasPrice: web3.utils.toWei(TESTNETS_GASPRICE, 'gwei'),
             gas: DEFAULT_OPERATIONS_GASLIMIT,
             skipDryRun: true
-        }
+        },
+        avalanche : {
+            provider: () => new HDWalletProvider(MNEMONIC, "https://api.avax.network/ext/bc/C/rpc"),
+            network_id: 43114,
+            confirmations: 2,
+            timeoutBlocks: 200,
+            gasPrice: web3.utils.toWei(TESTNETS_GASPRICE, 'gwei'),
+            gas: DEFAULT_OPERATIONS_GASLIMIT,
+            skipDryRun: true
+        },
+        fuji: {
+            provider: () => new HDWalletProvider(MNEMONIC, "https://api.avax-test.network/ext/bc/C/rpc"),
+            network_id: 43113,
+            confirmations: 2,
+            timeoutBlocks: 200,
+            gasPrice: web3.utils.toWei(TESTNETS_GASPRICE, 'gwei'),
+            gas: DEFAULT_OPERATIONS_GASLIMIT,
+            skipDryRun: true
+        },
+        harmony: {
+            provider: () => new HDWalletProvider(MNEMONIC, "https://api.s0.t.hmny.io"),
+            network_id: 1666600000,
+            confirmations: 2,
+            timeoutBlocks: 200,
+            gasPrice: web3.utils.toWei(TESTNETS_GASPRICE, 'gwei'),
+            gas: DEFAULT_OPERATIONS_GASLIMIT,
+            skipDryRun: true
+        },
+        harmonyTestnet: {
+            provider: () => new HDWalletProvider(MNEMONIC, "https://api.s0.b.hmny.io"),
+            network_id: 1666700000,
+            confirmations: 2,
+            timeoutBlocks: 200,
+            gasPrice: web3.utils.toWei(TESTNETS_GASPRICE, 'gwei'),
+            gas: DEFAULT_OPERATIONS_GASLIMIT,
+            skipDryRun: true
+        }/* ,
+        fantom: {
+            provider: () => new HDWalletProvider(MNEMONIC, "https://api.s0.b.hmny.io"),
+            network_id: 1666700000,
+            confirmations: 2,
+            timeoutBlocks: 200,
+            gasPrice: web3.utils.toWei(TESTNETS_GASPRICE, 'gwei'),
+            gas: DEFAULT_OPERATIONS_GASLIMIT,
+            skipDryRun: true
+        },
+        fantomTestnet: {
+            provider: () => new HDWalletProvider(MNEMONIC, "https://api.s0.b.hmny.io"),
+            network_id: 1666700000,
+            confirmations: 2,
+            timeoutBlocks: 200,
+            gasPrice: web3.utils.toWei(TESTNETS_GASPRICE, 'gwei'),
+            gas: DEFAULT_OPERATIONS_GASLIMIT,
+            skipDryRun: true
+        } */
     },
 
     compilers: {

@@ -10,8 +10,8 @@ contract LessLibrary is Ownable {
     address[] public factoryAddress = new address[](2);
 
     uint256 private minInvestorBalance = 1000 * 1e18;
-    uint256 private votingTime = 3 days; //three days
-    uint256 private registrationTime = 1 days; // one day
+    uint256 private votingTime = 5 minutes; //three days
+    uint256 private registrationTime = 5 minutes; // one day
     uint256 private minVoterBalance = 500 * 1e18; // minimum number of  tokens to hold to vote
     uint256 private minCreatorStakedBalance = 10000 * 1e18; // minimum number of tokens to hold to launch rocket
     uint8 private feePercent = 2;

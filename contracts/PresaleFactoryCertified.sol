@@ -2,10 +2,11 @@
 pragma solidity ^0.8.0;
 
 import "./PresaleCertified.sol";
+import "./libraries/Calculation1.sol";
 
 contract PresaleFactoryCertified is ReentrancyGuard {
-    LessLibrary public immutable safeLibrary;
-    address public owner;
+    LessLibrary public safeLibrary;
+    //address public owner;
 
     struct PresaleInfo {
         address tokenAddress;
@@ -47,13 +48,8 @@ contract PresaleFactoryCertified is ReentrancyGuard {
         string whitepaper;
     }
 
-    modifier onlyOwner() {
-        require(msg.sender == owner);
-        _;
-    }
-
     modifier onlyDev() {
-        require(msg.sender == owner || safeLibrary.getDev() == msg.sender);
+        require(msg.sender == safeLibrary.owner() || safeLibrary.getDev() == msg.sender);
         _;
     }
 
@@ -68,15 +64,12 @@ contract PresaleFactoryCertified is ReentrancyGuard {
         address creator,
         address tokenAddress
     );
-    event Received(address indexed from, uint256 amount);
 
     constructor(address _bscsInfoAddress) {
         safeLibrary = LessLibrary(_bscsInfoAddress);
-        owner = msg.sender;
     }
 
     receive() external payable {
-        emit Received(msg.sender, msg.value);
     }
 
     function createPresaleCertified(
@@ -100,7 +93,7 @@ contract PresaleFactoryCertified is ReentrancyGuard {
                     _info._signature,
                     1
                 ),
-            "SIGN"
+            "1"
         );
         if (_addition.liquidity) {
             require(
@@ -108,54 +101,54 @@ contract PresaleFactoryCertified is ReentrancyGuard {
                     _cakeInfo.liquidityPercentageAllocation > 0 &&
                     _cakeInfo.listingPriceInWei > 0 &&
                     _cakeInfo.lpTokensLockDurationInDays > 29,
-                "LIQ"
+                "2"
             );
         }
         if (_addition.whitelist.length == 0) {
-            require(block.timestamp + safeLibrary.getRegistrationTime() <= _info.openTime, "TIME");
+            require(block.timestamp + safeLibrary.getRegistrationTime() + 86400*3 <= _info.openTime, "3"); //PROD: change 60*3 (approval time)
         } else {
-            require(block.timestamp <= _info.openTime, "TIME");
+            require(block.timestamp + 86400*3 <= _info.openTime, "4"); //PROD: change 60*3 (approval time)
         }
         require(
-            6900 < _info.closeTime - _info.openTime &&
+            6900 < _info.closeTime - _info.openTime && //PROD: 6900
                 _info.tokenPriceInWei > 0 &&
                 _info.softCapInWei > 0 &&
                 _info.hardCapInWei > 0 &&
                 _info.hardCapInWei >= _info.softCapInWei,
-            "PARAM"
+            "5"
         );
         if (address(0) != _addition.nativeToken) {
             require(
                 safeLibrary.isValidStablecoin(_addition.nativeToken),
-                "STABLECOIN"
+                "6"
             );
         }
 
         ERC20 _token = ERC20(_info.tokenAddress);
 
-        uint256 feeEth = Calculations.usdtToEthFee(address(safeLibrary));
-        //uint256 feeEth = 50000000000000000;
-        require(msg.value >= feeEth && feeEth > 0, "FEE");
+        uint256 feeEth = Calculations.usdtToEthFee(address(safeLibrary)); //PROD
+        //uint256 feeEth = 500000000;
+        require(msg.value >= feeEth && feeEth > 0, "7");
 
         // maxLiqPoolTokenAmount, maxTokensToBeSold, requiredTokenAmount
         uint256[] memory tokenAmounts = new uint256[](3);
-        tokenAmounts = Calculations.countAmountOfTokens(
+        tokenAmounts = Calculation1.countAmountOfTokens(
             _info.hardCapInWei,
             _info.tokenPriceInWei,
             _cakeInfo.listingPriceInWei,
             _cakeInfo.liquidityPercentageAllocation,
-            _token.decimals()
+            _token.decimals(),
+            (address(_addition.nativeToken) == address(0)) ? 18 : ERC20(_addition.nativeToken).decimals()
         );
 
         PresaleCertified presale = new PresaleCertified(
             payable(address(this)),
             address(safeLibrary),
-            safeLibrary.owner(),
             safeLibrary.getDev()
         );
         require(
             _token.transferFrom(msg.sender, address(presale), tokenAmounts[2]),
-            "T.TRANSFER"
+            "8"
         );
         payable(address(presale)).transfer(feeEth);
         initializePresaleCertified(

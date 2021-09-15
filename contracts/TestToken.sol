@@ -6,10 +6,13 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 contract TestToken is ERC20 {
     constructor(string memory name, string memory symbol) payable ERC20(name, symbol) 
     {
-        uint256 initialSupply = 10 ** 6 * 10 ** uint256(decimals());
+        uint256 initialSupply = 10 ** 3 * 10 ** uint256(decimals());
         _mint(msg.sender, initialSupply);
     }
     function mint(address to, uint256 amount) public {
         _mint(to, amount);
+    }
+    function decimals() public view virtual override returns (uint8) {
+        return 8;
     }
 }
