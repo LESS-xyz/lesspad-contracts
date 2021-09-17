@@ -76,7 +76,7 @@ module.exports = {
             gas: DEFAULT_OPERATIONS_GASLIMIT,
             skipDryRun: true
         },
-        bsc: {
+        bscMainnet: {
             provider: () => new HDWalletProvider(MNEMONIC, "https://bsc-dataseed3.binance.org"),
             network_id: 56,
             confirmations: 2,
@@ -86,7 +86,7 @@ module.exports = {
             skipDryRun: true
         },
         maticMainnet: {
-            provider: () => new HDWalletProvider(MNEMONIC, "https://rpc-mainnet.matic.network"),
+            provider: () => new HDWalletProvider(MNEMONIC, "https://polygon-rpc.com/"),
             network_id: 137,
             confirmations: 2,
             timeoutBlocks: 200,
@@ -105,7 +105,8 @@ module.exports = {
         },
         avalanche : {
             provider: () => new HDWalletProvider(MNEMONIC, "https://api.avax.network/ext/bc/C/rpc"),
-            network_id: 43114,
+            network_id: "*",
+            chainId: 43114,
             confirmations: 2,
             timeoutBlocks: 200,
             gasPrice: web3.utils.toWei(TESTNETS_GASPRICE, 'gwei'),
@@ -114,10 +115,11 @@ module.exports = {
         },
         fuji: {
             provider: () => new HDWalletProvider(MNEMONIC, "https://api.avax-test.network/ext/bc/C/rpc"),
-            network_id: 43113,
+            chainId: 43113,
+            network_id: "*",
             confirmations: 2,
             timeoutBlocks: 200,
-            gasPrice: web3.utils.toWei(TESTNETS_GASPRICE, 'gwei'),
+            gasPrice: 225000000000,
             gas: DEFAULT_OPERATIONS_GASLIMIT,
             skipDryRun: true
         },

@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-//import "../LessLibrary.sol";
-
 library Calculation1 {
 
     function countAmountOfTokens(

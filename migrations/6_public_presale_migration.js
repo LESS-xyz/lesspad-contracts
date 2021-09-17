@@ -57,6 +57,8 @@ module.exports = function (deployer, network, _) {
         library = await LessLibrary.at(LIBRARY_MATIC);
         calculations = await Calculations.at(CALC_MATIC);
         ritaToken = await TestTokenTwo.at(TOKEN_MATIC);
+
+        await library.setFactoryAddress(factory.address, ZERO);
     }
     
     let info = require("../testnet-params/public.json");

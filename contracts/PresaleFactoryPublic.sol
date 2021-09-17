@@ -5,9 +5,8 @@ import "./PresalePublic.sol";
 
 contract PresaleFactoryPublic {
     LessLibrary public immutable safeLibrary;
-    address public owner;
 
-    uint256 private lastTierTime = 1200;
+    uint256 private lastTierTime = 6900;
 
     struct PresaleInfo {
         address tokenAddress;
@@ -53,7 +52,7 @@ contract PresaleFactoryPublic {
 
     constructor(address _bscsInfoAddress) {
         safeLibrary = LessLibrary(_bscsInfoAddress);
-        owner = msg.sender;
+        //owner = msg.sender;
     }
 
     receive() external payable {
@@ -107,8 +106,8 @@ contract PresaleFactoryPublic {
         ERC20 _token = ERC20(_info.tokenAddress);
 
       
-        //uint256 feeEth = Calculations.usdtToEthFee(address(safeLibrary)); //PROD
-        uint256 feeEth = 500000000;
+        uint256 feeEth = Calculations.usdtToEthFee(address(safeLibrary)); //PROD
+        
         require(msg.value >= feeEth && feeEth > 0, "value<=0");
 
         // maxLiqPoolTokenAmount, maxTokensToBeSold, requiredTokenAmount
@@ -198,7 +197,7 @@ contract PresaleFactoryPublic {
     }
 
     function migrateTo(address payable _newFactory) external {
-        require(msg.sender == owner || safeLibrary.getDev() == msg.sender);
+        require(msg.sender == safeLibrary.owner() || safeLibrary.getDev() == msg.sender);
         _newFactory.transfer(address(this).balance);
     }
 }

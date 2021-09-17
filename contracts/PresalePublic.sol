@@ -35,8 +35,8 @@ contract PresalePublic is ReentrancyGuard {
     uint256 private tokenMagnitude;
     address private WETHAddress;
 
-    uint256[4] private tiersTimes = [1200, 900, 600, 300]; // 1h55m-> 1h45m -> 1h30m -> 1h
-    uint256 private lpDaySeconds = 30; // one day
+    uint256[4] private tiersTimes = [6900, 6300, 5400, 3600]; // 1h55m-> 1h45m -> 1h30m -> 1h
+    uint256 private lpDaySeconds = 1 days; // one day
 
     struct TicketsInfo {
         address user;

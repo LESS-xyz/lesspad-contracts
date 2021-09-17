@@ -12,7 +12,13 @@ const {
   CALC_MATIC, 
   CALC1_KOVAN, 
   CALC1_BSC, 
-  CALC1_MATIC
+  CALC1_MATIC,
+  LIBRARY_BSC_MAINNET,
+  LIBRARY_MATIC_MAINNET,
+  CALC_BSC_MAINNET,
+  CALC_MATIC_MAINNET,
+  CALC1_BSC_MAINNET,
+  CALC1_MATIC_MAINNET
 } = process.env;
 
 module.exports = function (deployer, network, _) {
@@ -34,6 +40,16 @@ module.exports = function (deployer, network, _) {
       calc = await Calculations.at(CALC_MATIC);
       calc1 = await Calculation1.at(CALC1_MATIC);
       lib = await LessLibrary.at(LIBRARY_MATIC);
+    }
+    else if(network == "bscMainnet"){
+      calc = await Calculations.at(CALC_BSC_MAINNET);
+      lib = await LessLibrary.at(LIBRARY_BSC_MAINNET);
+      calc1 = await Calculation1.at(CALC1_BSC_MAINNET);
+    }
+    else if(network == "maticMainnet"){
+      calc = await Calculations.at(CALC_MATIC_MAINNET);
+      lib = await LessLibrary.at(LIBRARY_MATIC_MAINNET);
+      calc1 = await Calculation1.at(CALC1_MATIC_MAINNET);
     }
     else 
     {
